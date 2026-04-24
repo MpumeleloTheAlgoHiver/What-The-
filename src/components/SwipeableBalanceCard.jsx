@@ -51,6 +51,12 @@ const formatKMB = (value) => {
   return `${sign}R${formatted}`;
 };
 
+const formatPrecise = (value) => {
+  const num = Number(value);
+  const truncated = truncateDecimal(num, 2);
+  return `R${truncated.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
 const TIMEFRAME_DAYS = { d: 7, "5d": 5, m: 90, y: 365, all: 1825 };
 
 const SwipeableBalanceCard = ({
@@ -660,7 +666,7 @@ const SwipeableBalanceCard = ({
                     return (
                       <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg px-2 py-1 shadow-md">
                         <p className="text-[9px] text-slate-500">{payload[0]?.payload?.d}</p>
-                        <p className="text-[10px] font-semibold text-slate-800">{formatKMB(payload[0]?.value)}</p>
+                        <p className="text-[10px] font-semibold text-slate-800">{formatPrecise(payload[0]?.value)}</p>
                       </div>
                     );
                   }}
