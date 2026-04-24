@@ -327,26 +327,32 @@ const SwipeableBalanceCard = ({
         const startDateStr = cutoff.toISOString().split("T")[0];
         console.log(`[SwipeableBalanceCard] Fetching history for tab: ${activeTab}, days: ${days}, startDate: ${startDateStr}`);
 
-        // Process strategies using client_strategy_returns_c table (inception_pct)
-        const strategyInceptionByDate = {};
+        // Process strategies using client_strategy_returns_c table (basket_value from last 5 rows)
+        const strategyBasketByDate = {};
         const endDateStr = new Date().toISOString().split("T")[0];
 
         const strategyHoldings = holdingsToChart.filter(h => h.isStrategy && h.strategyId);
         for (const sh of strategyHoldings) {
           try {
-            // Fetch from client_strategy_returns_c table with inception_pct
-            const returns = await getClientStrategyReturns(userId, sh.strategyId, startDateStr, endDateStr);
+            // Fetch last 5 rows of basket_value from client_strategy_returns_c
+            const { data, error } = await supabase
+              .from("client_strategy_returns_c")
+              .select("as_of_date, basket_value")
+              .eq("user_id", userId)
+              .eq("strategy_id", sh.strategyId)
+              .order("as_of_date", { ascending: false })
+              .limit(5);
 
-            if (returns && returns.length > 0) {
-              // inception_pct is already in percentage form (1.00 for 1%, not 0.01)
-              returns.forEach((r) => {
-                const dateKey = r.d;
-                // Use inception_pct directly as the return value
-                strategyInceptionByDate[dateKey] = (strategyInceptionByDate[dateKey] || 0) + r.v;
+            if (!error && data && data.length > 0) {
+              // Process the 5 rows and convert basket_value from cents to rands
+              data.forEach((row) => {
+                const dateKey = row.as_of_date;
+                const basketValueRands = (Number(row.basket_value || 0)) / 100;
+                strategyBasketByDate[dateKey] = (strategyBasketByDate[dateKey] || 0) + basketValueRands;
               });
             }
           } catch (e) {
-            console.warn(`[Chart] Failed to fetch strategy returns for ${sh.strategyId}:`, e);
+            console.warn(`[Chart] Failed to fetch strategy basket values for ${sh.strategyId}:`, e);
           }
         }
 
@@ -406,7 +412,7 @@ const SwipeableBalanceCard = ({
         });
 
         const allPriceData = (await Promise.all(pricePromises)).filter(Boolean);
-        const hasStrategyData = Object.keys(strategyInceptionByDate).length > 0;
+        const hasStrategyData = Object.keys(strategyBasketByDate).length > 0;
 
         if (allPriceData.length === 0 && !hasStrategyData) {
           // No price history in DB — synthesize a 2-point chart from cost basis → current market value
@@ -432,7 +438,7 @@ const SwipeableBalanceCard = ({
         // Merge dates and calculate PnL per point
         const dateSet = new Set();
         allPriceData.forEach(({ prices }) => prices.forEach((p) => dateSet.add(p.ts)));
-        Object.keys(strategyInceptionByDate).forEach((d) => dateSet.add(d));
+        Object.keys(strategyBasketByDate).forEach((d) => dateSet.add(d));
         const sortedDates = Array.from(dateSet).sort();
 
         const rawPriceByDate = {};
@@ -470,9 +476,9 @@ const SwipeableBalanceCard = ({
               hasVal = true;
             }
           }
-          // Add strategy inception returns (already in percentage form)
-          if (strategyInceptionByDate[dateKey] !== undefined) {
-            totalPnl += strategyInceptionByDate[dateKey];
+          // Add strategy basket value from last 5 rows (in rands)
+          if (strategyBasketByDate[dateKey] !== undefined) {
+            totalPnl += strategyBasketByDate[dateKey];
             hasVal = true;
           }
           if (hasVal) points.push({ d: dateKey, v: Number(totalPnl.toFixed(2)) });
