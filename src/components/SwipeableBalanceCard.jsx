@@ -173,6 +173,7 @@ const SwipeableBalanceCard = ({
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [returnData5d, setReturnData5d] = useState({ pnl: 0, pct: 0 });
+  const [latestBasketValue, setLatestBasketValue] = useState(0);
   const holdingsScrollRef = useRef(null);
 
   const scrollToHoldingIndex = (index) => {
@@ -542,10 +543,12 @@ const SwipeableBalanceCard = ({
           if (!error && data) {
             const pnlValue = data[columns.pnl] || 0;
             const pctValue = data[columns.pct] || 0;
+            const basketValue = (Number(data.basket_value || 0)) / 100;
             setReturnData5d({
               pnl: (Number(pnlValue)) / 100,
               pct: Number(pctValue)
             });
+            setLatestBasketValue(basketValue);
           }
         } else if (asset.security_id) {
           // For stocks, fetch from stock_returns_c
@@ -560,10 +563,12 @@ const SwipeableBalanceCard = ({
           if (!error && data) {
             const pnlValue = data[columns.pnl] || 0;
             const pctValue = data[columns.pct] || 0;
+            const basketValue = (Number(data.basket_value || 0)) / 100;
             setReturnData5d({
               pnl: (Number(pnlValue)) / 100,
               pct: Number(pctValue)
             });
+            setLatestBasketValue(basketValue);
           }
         }
       } catch (e) {
@@ -583,12 +588,17 @@ const SwipeableBalanceCard = ({
     100
     : dbData.totalInvested;
   const displayInvestedAmount = selectedAsset
-    ? (selectedAsset.invested_amount !== undefined 
-        ? Number(selectedAsset.invested_amount) / 100 
+    ? (selectedAsset.invested_amount !== undefined
+        ? Number(selectedAsset.invested_amount) / 100
         : (Number(selectedAsset.avg_fill || 0) * Number(selectedAsset.quantity || 0)) / 100)
     : dbData.totalInvestedAmount;
-  const displayReturn = activeTab === "5d" ? returnData5d.pnl : (displayMarketValue - displayInvested);
-  const displayBalance = displayMarketValue;
+  const displayReturn = ["5d", "m", "ytd", "all"].includes(activeTab)
+    ? returnData5d.pnl
+    : (displayMarketValue - displayInvested);
+  // Show latest basket_value for period views, otherwise use market value
+  const displayBalance = ["5d", "m", "ytd", "all"].includes(activeTab) && latestBasketValue > 0
+    ? latestBasketValue
+    : displayMarketValue;
 
   const isLoss = displayReturn < 0;
   const returnPct = ["5d", "m", "ytd", "all"].includes(activeTab)
@@ -663,7 +673,18 @@ const SwipeableBalanceCard = ({
           <div className="flex items-center gap-2 mt-2">
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${isLoss ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
               <TrendIcon size={11} strokeWidth={2.5} />
-              {isVisible ? formatKMB(Math.abs(displayReturn)) : masked}
+              {isVisible ? (
+                <>
+                  {["5d", "m", "ytd", "all"].includes(activeTab) && (
+                    <span className="text-[10px] opacity-75">
+                      {activeTab === "5d" && "5D:"}{activeTab === "m" && "1M:"}{activeTab === "ytd" && "YTD:"}{activeTab === "all" && "Inc:"}
+                    </span>
+                  )}
+                  {formatKMB(Math.abs(displayReturn))}
+                </>
+              ) : (
+                masked
+              )}
             </span>
             <span className={`text-[11px] font-medium ${isLoss ? "text-destructive" : "text-success"}`}>
               {isVisible ? `${isLoss ? "-" : "+"}${returnPct}%` : masked}
