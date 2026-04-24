@@ -150,6 +150,13 @@ const SwipeableBalanceCard = ({
   }, [lastUpdated]);
 
   useEffect(() => {
+    // Auto-select first investment on load
+    if (!selectedAsset && dbData.holdings.length > 0) {
+      setSelectedAsset(dbData.holdings[0]);
+    }
+  }, [dbData.holdings.length]);
+
+  useEffect(() => {
     if (!isBackFacing) setIsOpen(false);
   }, [isBackFacing]);
 
