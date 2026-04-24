@@ -44,11 +44,24 @@
     --shadow-hero: 0 20px 60px -20px hsl(270 60% 35% / 0.5), inset 0 1px 0 hsl(0 0% 100% / 0.06);
     --shadow-mini: 0 8px 24px -12px hsl(270 50% 20% / 0.6);
 
+    --sidebar-background: 260 30% 8%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 160 70% 45%;
+    --sidebar-primary-foreground: 260 30% 8%;
+    --sidebar-accent: 260 20% 18%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 260 20% 20%;
+    --sidebar-ring: 160 70% 45%;
+
     /* Custom tokens */
+    --chart-bar: 260 25% 18%;
+    --chart-bar-active: 260 30% 25%;
     --success: 160 70% 45%;
     --success-foreground: 260 30% 8%;
     --tab-active: 0 0% 100%;
     --tab-inactive: 260 10% 55%;
+    --nav-active: 260 40% 35%;
+    --badge-new: 160 70% 45%;
   }
 }
 
@@ -57,45 +70,9 @@
     @apply border-border;
   }
 
-  html {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    overscroll-behavior-x: none;
-  }
-
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', sans-serif;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    overscroll-behavior-x: none;
-  }
-
-  html::-webkit-scrollbar,
-  body::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-@layer components {
-  .glass-card {
-    background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.18),
-        rgba(255, 255, 255, 0.08)
-      ),
-      rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-    border-radius: 24px;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .glass-card {
-      background: rgba(255, 255, 255, 0.18);
-    }
   }
 }
 
@@ -139,33 +116,5 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
-  }
-}
-
-.app-shell,
-.app-content {
-  overscroll-behavior-x: none;
-}
-
-.recharts-wrapper,
-.recharts-wrapper svg,
-.recharts-surface,
-.recharts-wrapper *:focus,
-.recharts-wrapper *:active {
-  outline: none !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.recharts-tooltip-cursor {
-  display: none !important;
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
   }
 }

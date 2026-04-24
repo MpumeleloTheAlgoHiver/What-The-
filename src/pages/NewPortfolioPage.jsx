@@ -364,10 +364,14 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
   }, [rawHoldings, strategies]);
 
   const displayInvestedAmount = useMemo(() => {
-    const holdingsInvested = (rawHoldings || []).filter(h => !h.strategy_id).reduce((sum, h) => sum + (h.invested_amount || h.market_value || 0) / 100, 0);
+    const holdingsInvested = (rawHoldings || []).filter(h => !h.strategy_id).reduce((sum, h) => {
+      if (h.invested_amount !== undefined) return sum + Number(h.invested_amount) / 100;
+      return sum + ((h.avg_fill || 0) * (h.quantity || 0)) / 100;
+    }, 0);
     const strategiesInvested = strategies.reduce((sum, s) => sum + (s.investedAmount || 0), 0);
     return holdingsInvested + strategiesInvested;
   }, [rawHoldings, strategies]);
+
 
   const allStrategyHoldings = useMemo(() => {
     const holdingsMap = new Map();
@@ -667,7 +671,8 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
               const totalPnl = displayAccountValue - displayTotalCostBasis;
               const totalPnlPct = displayTotalCostBasis > 0 ? (totalPnl / displayTotalCostBasis) * 100 : 0;
               const isPnlPos = totalPnl >= 0;
-              const balanceDisplay = displayInvestedAmount + totalPnl;
+              const balanceDisplay = displayAccountValue;
+
               return (
                 <>
                   <div className="flex items-center gap-3">

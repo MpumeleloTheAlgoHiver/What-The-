@@ -31,7 +31,7 @@ export const getStrategiesWithMetrics = async () => {
 
     // Fetch strategies with nested strategy_metrics
     const { data: strategies, error: strategiesError } = await supabase
-      .from("strategies")
+      .from("strategies_c")
       .select(`
         *,
         strategy_metrics!strategy_metrics_strategy_id_fkey(*)
@@ -180,7 +180,7 @@ export const getStrategyById = async (strategyId) => {
 
   try {
     const { data: strategy, error } = await supabase
-      .from("strategies")
+      .from("strategies_c")
       .select(`
         *,
         strategy_metrics!strategy_metrics_strategy_id_fkey(*)
@@ -349,7 +349,7 @@ export const getStrategyPriceHistory = async (strategyId, timeframe = "6M") => {
     console.log(`🔍 Computing price history from holdings for strategy ${strategyId} (${timeframe})...`);
 
     const { data: strategy, error: stratError } = await supabase
-      .from("strategies")
+      .from("strategies_c")
       .select("holdings")
       .eq("id", strategyId)
       .single();
@@ -478,10 +478,63 @@ export const getStrategyPriceHistory = async (strategyId, timeframe = "6M") => {
 
     cache.priceHistory.set(cacheKey, { data: result, timestamp: Date.now() });
     console.log(`✅ Computed ${result.length} NAV points from holdings for strategy ${strategyId} (${timeframe})`);
+    if (result.length === 0) console.warn(`⚠️ Strategy ${strategyId} (${timeframe}) result is empty!`);
     return result;
 
   } catch (error) {
     console.error("❌ Unexpected error in getStrategyPriceHistory:", error);
+    return [];
+  }
+};
+
+/**
+ * Get client strategy returns from client_strategy_returns_c table
+ * Returns inception_pct based on the selected period
+ * @param {string} userId - User UUID
+ * @param {string} strategyId - Strategy UUID
+ * @param {string} startDate - Start date (YYYY-MM-DD)
+ * @param {string} endDate - End date (YYYY-MM-DD)
+ * @returns {Promise<Array>} Array of {d: date, v: inception_pct}
+ */
+export const getClientStrategyReturns = async (userId, strategyId, startDate, endDate) => {
+  if (!supabase || !userId || !strategyId) {
+    console.error("❌ Invalid parameters for getClientStrategyReturns");
+    return [];
+  }
+
+  try {
+    console.log(`🔍 Fetching client strategy returns for user ${userId}, strategy ${strategyId} from ${startDate} to ${endDate}`);
+
+    const { data, error } = await supabase
+      .from("client_strategy_returns_c")
+      .select("as_of_date, inception_pct")
+      .eq("user_id", userId)
+      .eq("strategy_id", strategyId)
+      .gte("as_of_date", startDate)
+      .lte("as_of_date", endDate)
+      .order("as_of_date", { ascending: true });
+
+    if (error) {
+      console.error("❌ Error fetching client strategy returns:", error);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      console.warn(`⚠️ No returns data found for user ${userId}, strategy ${strategyId}`);
+      return [];
+    }
+
+    // inception_pct is already in percentage form (1.00 for 1%, not 0.01)
+    const result = data.map((row) => ({
+      d: row.as_of_date,
+      v: Number(row.inception_pct || 0)
+    }));
+
+    console.log(`✅ Fetched ${result.length} return points for user ${userId}, strategy ${strategyId}`);
+    return result;
+
+  } catch (error) {
+    console.error("❌ Unexpected error in getClientStrategyReturns:", error);
     return [];
   }
 };
@@ -539,7 +592,7 @@ export const getMonthlyReturns = async (strategyId, startDate = null, actualPnlP
 
   try {
     const { data: strategy, error: stratError } = await supabase
-      .from("strategies")
+      .from("strategies_c")
       .select("holdings")
       .eq("id", strategyId)
       .single();

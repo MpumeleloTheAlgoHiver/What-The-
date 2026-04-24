@@ -61,10 +61,10 @@ export default async function handler(req, res) {
         db.from("securities_c")
           .select("id, symbol, name, logo_url, last_price, change_price, change_percent, sector, exchange")
           .in("id", securityIds),
-        db.from("security_prices")
-          .select("security_id, close_price, ts")
+        db.from("stock_returns_c")
+          .select("security_id, current_price, as_of_date")
           .in("security_id", securityIds)
-          .order("ts", { ascending: false })
+          .order("as_of_date", { ascending: false })
           .limit(securityIds.length * 2),
       ]);
 
@@ -76,7 +76,7 @@ export default async function handler(req, res) {
       (pricesResult.data || []).forEach(p => {
         if (!pricesBySecId[p.security_id]) pricesBySecId[p.security_id] = [];
         if (pricesBySecId[p.security_id].length < 2) {
-          pricesBySecId[p.security_id].push(p.close_price);
+          pricesBySecId[p.security_id].push(p.current_price);
         }
       });
       for (const [secId, prices] of Object.entries(pricesBySecId)) {
@@ -92,9 +92,17 @@ export default async function handler(req, res) {
       .map(h => {
         const sec = securitiesMap[h.security_id];
         const priceData = latestPricesMap[h.security_id];
-        const livePrice = sec?.last_price ?? priceData?.latestPrice ?? 0;
-        const dailyChange = sec?.change_price ?? (livePrice - (priceData?.prevPrice ?? livePrice));
-        const dailyChangePct = sec?.change_percent ?? (priceData?.prevPrice > 0 ? (dailyChange / priceData.prevPrice) * 100 : 0);
+        const livePriceRands = Number(sec?.last_price ?? priceData?.latestPrice ?? 0);
+        const prevPriceRands = Number(priceData?.prevPrice ?? livePriceRands);
+        const dailyChangeRands = sec?.change_price != null
+          ? Number(sec.change_price)
+          : (livePriceRands - prevPriceRands);
+        const dailyChangePct = sec?.change_percent != null
+          ? Number(sec.change_percent)
+          : (prevPriceRands > 0 ? (dailyChangeRands / prevPriceRands) * 100 : 0);
+        // avg_fill is stored in cents; last_price in rands — normalize price to cents
+        const livePrice = Math.round(livePriceRands * 100);
+        const dailyChange = Math.round(dailyChangeRands * 100);
         const quantity = h.quantity || 0;
         const avgFill = Number(h.avg_fill || 0);
         const isPending = !avgFill || avgFill === 0;

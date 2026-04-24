@@ -82,6 +82,10 @@ export default async function handler(req, res) {
       holdingsByStrategyId[h.strategy_id].push(h);
     }
 
+    const strategyIdsFromHoldings = Array.from(
+      new Set((userHoldings || []).map((h) => h.strategy_id).filter(Boolean))
+    );
+
     const allSecurityIds = (userHoldings || []).map(h => h.security_id).filter(Boolean);
     let livePriceMap = {};
     let symbolMap = {};
@@ -91,7 +95,8 @@ export default async function handler(req, res) {
         .select("id, symbol, last_price")
         .in("id", allSecurityIds);
       (secs || []).forEach(s => {
-        livePriceMap[s.id] = s.last_price || 0;
+        // last_price stored in rands; avg_fill in cents — normalize price to cents
+        livePriceMap[s.id] = Math.round(Number(s.last_price || 0) * 100);
         symbolMap[s.id] = s.symbol;
       });
     }
@@ -111,18 +116,35 @@ export default async function handler(req, res) {
       };
     }
 
-    const [allStrategiesResult, allHoldingSymbolsResult] = await Promise.all([
-      db.from("strategies").select(`
+    let allStrategies = [];
+    let stratErr = null;
+
+    const strategiesCResult = await db
+      .from("strategies_c")
+      .select(`
         id, name, short_name, description, risk_level, sector, icon_url, image_url, holdings, status,
         strategy_metrics (
           *
         )
       `)
-      .eq("status", "active"),
-    ]);
+      .eq("status", "active");
 
-    const allStrategies = allStrategiesResult.data || [];
-    const stratErr = allStrategiesResult.error;
+    if (strategiesCResult.error) {
+      const legacyStrategiesResult = await db
+        .from("strategies")
+        .select(`
+          id, name, short_name, description, risk_level, sector, icon_url, image_url, holdings, status,
+          strategy_metrics (
+            *
+          )
+        `)
+        .eq("status", "active");
+
+      allStrategies = legacyStrategiesResult.data || [];
+      stratErr = legacyStrategiesResult.error;
+    } else {
+      allStrategies = strategiesCResult.data || [];
+    }
 
     if (stratErr) {
       console.error("[user/strategies] Error fetching strategies:", stratErr);
@@ -160,11 +182,14 @@ export default async function handler(req, res) {
 
     const matchedStrategies = [];
     for (const strategy of allStrategies) {
+      const hasHoldingsForStrategy = (holdingsByStrategyId[strategy.id] || []).length > 0;
       const matchKey = strategyNames.find(sn =>
         sn.toLowerCase() === (strategy.name || "").toLowerCase() ||
         sn.toLowerCase() === (strategy.short_name || "").toLowerCase()
       );
-      if (matchKey) {
+      const isLinkedFromHoldings = strategyIdsFromHoldings.includes(strategy.id);
+
+      if (matchKey || hasHoldingsForStrategy || isLinkedFromHoldings) {
         const metrics = strategy.strategy_metrics;
         const latestMetric = Array.isArray(metrics) ? metrics[0] : metrics;
         const enrichedHoldings = (strategy.holdings || []).map(h => {
@@ -225,7 +250,7 @@ export default async function handler(req, res) {
           currentMarketValue,
           currentValue: currentMarketValue,
           metrics: latestMetric || null,
-          firstInvestedDate: strategyFirstDate[matchKey] || null,
+          firstInvestedDate: matchKey ? (strategyFirstDate[matchKey] || null) : null,
         });
       }
     }

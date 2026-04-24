@@ -13,12 +13,15 @@ function parseOnboardingFlags(record) {
   let sofDone = false;
   let termsDone = false;
   let agreementSigned = false;
+  let bankLetterDone = false;
+  let addressDone = false;
 
   // "onboarding_complete" is only written by the signing step — definitive proof of full completion.
   if (record?.kyc_status === "onboarding_complete") {
     taxDone = true; bankDone = true; mandateAgreed = true;
     riskDone = true; sofDone = true; termsDone = true;
-    agreementSigned = true;
+    agreementSigned = true; bankLetterDone = true;
+    addressDone = true;
   } else if (record?.sumsub_raw) {
     try {
       const raw = typeof record.sumsub_raw === "string"
@@ -27,10 +30,13 @@ function parseOnboardingFlags(record) {
       if (kycDone && (raw?.signed_at || raw?.account_agreement_signed)) {
         taxDone = true; bankDone = true; mandateAgreed = true;
         riskDone = true; sofDone = true; termsDone = true;
-        agreementSigned = true;
+        agreementSigned = true; bankLetterDone = true;
+        addressDone = true;
       } else {
         taxDone = !!raw?.tax_details_saved;
         bankDone = !!raw?.bank_details_saved;
+        bankLetterDone = !!raw?.bank_letter_uploaded;
+        addressDone = !!raw?.address_saved;
         mandateAgreed = !!raw?.mandate_data?.agreedMandate || !!raw?.mandate_accepted;
         riskDone = !!raw?.risk_disclosure_accepted;
         sofDone = !!raw?.source_of_funds_accepted;
@@ -40,9 +46,9 @@ function parseOnboardingFlags(record) {
     } catch {}
   }
 
-  const allComplete = kycDone && taxDone && bankDone && mandateAgreed && riskDone && sofDone && termsDone && agreementSigned;
-  console.log(`[Onboarding Diagnosis] User ${record?.user_id || 'unknown'}: kyc=${kycDone}, tax=${taxDone}, bank=${bankDone}, mandate=${mandateAgreed}, risk=${riskDone}, sof=${sofDone}, terms=${termsDone}, agreement=${agreementSigned} => ALL=${allComplete}`);
-  return { kycDone, taxDone, bankDone, mandateAgreed, riskDone, sofDone, termsDone, agreementSigned, allComplete };
+  const allComplete = kycDone && taxDone && bankDone && bankLetterDone && addressDone && mandateAgreed && riskDone && sofDone && termsDone && agreementSigned;
+  console.log(`[Onboarding Diagnosis] User ${record?.user_id || 'unknown'}: kyc=${kycDone}, tax=${taxDone}, bank=${bankDone}, bankLetter=${bankLetterDone}, address=${addressDone}, mandate=${mandateAgreed}, risk=${riskDone}, sof=${sofDone}, terms=${termsDone}, agreement=${agreementSigned} => ALL=${allComplete}`);
+  return { kycDone, taxDone, bankDone, bankLetterDone, addressDone, mandateAgreed, riskDone, sofDone, termsDone, agreementSigned, allComplete };
 }
 
 export default async function handler(req, res) {

@@ -385,7 +385,7 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
 
         {/* Title sitting underneath profile icon */}
         <div className="mb-8">
-          <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em] mb-1">Welcome back, Mufaro</p>
+          <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em] mb-1">Welcome back</p>
           <h1 className="text-2xl font-bold text-white tracking-tight" style={{ fontFamily: fonts.display }}>Instant Liquidity</h1>
         </div>
 

@@ -54,7 +54,8 @@ const processSecurity = (security) => ({
 });
 
 /**
- * Get all securities with their latest metrics from Supabase
+ * Get all securities with their latest intraday metrics from Supabase
+ * Pulls current price and daily change from stock_intraday_c table (latest timestamp)
  * @returns {Promise<Array>} Array of securities with metrics
  */
 export const getMarketsSecuritiesWithMetrics = async () => {
@@ -71,35 +72,61 @@ export const getMarketsSecuritiesWithMetrics = async () => {
   }
 
   try {
-    console.log("🔍 Fetching rich market data from v_latest_security_metrics...");
+    console.log("🔍 Fetching latest intraday data from stock_intraday_c...");
+
+    // Fetch latest intraday data for each security (grouped by security_id, latest timestamp)
+    const { data: intradayData, error: intradayError } = await supabase
+      .from("stock_intraday_c")
+      .select("security_id, current_price, 1d_pct, 1d_abs, timestamp")
+      .order("timestamp", { ascending: false });
+
+    if (intradayError) {
+      console.error("❌ Error fetching from stock_intraday_c:", intradayError);
+      throw intradayError;
+    }
+
+    // Group by security_id and get the latest timestamp for each
+    const latestBySecurityId = new Map();
+    for (const row of intradayData || []) {
+      if (!latestBySecurityId.has(row.security_id)) {
+        latestBySecurityId.set(row.security_id, row);
+      }
+    }
+
+    // Now fetch the security details
+    const securityIds = Array.from(latestBySecurityId.keys());
+    if (securityIds.length === 0) {
+      console.warn("⚠️ No intraday data found");
+      return [];
+    }
 
     const { data: securities, error: securitiesError } = await supabase
-      .from("v_latest_security_metrics")
+      .from("securities_c")
       .select("*")
+      .in("id", securityIds)
       .order("market_cap", { ascending: false, nullsFirst: false });
 
     if (securitiesError) {
-      console.error("❌ Error fetching securities from view:", securitiesError);
-
-      // Fallback to basic securities table if view fails
-      console.log("⚠️ Falling back to basic securities table...");
-      const { data: fallbackSecurities, error: fallbackError } = await supabase
-        .from("securities_c")
-        .select("*")
-        .eq("is_active", true)
-        .order("market_cap", { ascending: false, nullsFirst: false });
-
-      if (fallbackError) throw fallbackError;
-      return (fallbackSecurities || []).map(s => ({
-        ...s,
-        currentPrice: s.last_price ? Number(s.last_price) : null,
-        changePct: Number(s.change_percentage || s.change_percent || 0),
-      }));
+      console.error("❌ Error fetching securities:", securitiesError);
+      throw securitiesError;
     }
 
-    const processedSecurities = (securities || []).map(processSecurity);
+    // Merge intraday data with security details
+    const processedSecurities = (securities || []).map(security => {
+      const intraday = latestBySecurityId.get(security.id);
+      return {
+        ...security,
+        id: security.id,
+        currentPrice: intraday?.current_price ? Number(intraday.current_price) / 100 : null,
+        changePct: intraday?.["1d_pct"] != null ? Number(intraday["1d_pct"]) : null,
+        changeAbs: intraday?.["1d_abs"] != null ? Number(intraday["1d_abs"]) / 100 : null,
+        // Legacy aliases for backward compatibility - use Rands
+        last_price: intraday?.current_price ? Number(intraday.current_price) / 100 : null,
+        change_percentage: intraday?.["1d_pct"],
+      };
+    });
 
-    console.log(`✅ Fetched ${processedSecurities.length} securities with rich metrics`);
+    console.log(`✅ Fetched ${processedSecurities.length} securities with intraday metrics`);
 
     cache.markets.data = processedSecurities;
     cache.markets.timestamp = now;
@@ -112,7 +139,7 @@ export const getMarketsSecuritiesWithMetrics = async () => {
 };
 
 /**
- * Get a single security by symbol with its metrics
+ * Get a single security by symbol with its latest intraday metrics
  * @param {string} symbol - The stock symbol
  * @returns {Promise<Object|null>} Security object with metrics or null
  */
@@ -125,8 +152,9 @@ export const getSecurityBySymbol = async (symbol) => {
   try {
     console.log(`🔍 Fetching security ${symbol}...`);
 
+    // First get the security details
     const { data: security, error: securityError } = await supabase
-      .from("v_latest_security_metrics")
+      .from("securities_c")
       .select("*")
       .eq("symbol", symbol)
       .single();
@@ -141,7 +169,30 @@ export const getSecurityBySymbol = async (symbol) => {
       return null;
     }
 
-    const processedSecurity = processSecurity(security);
+    // Get the latest intraday data for this security
+    const { data: intradayData, error: intradayError } = await supabase
+      .from("stock_intraday_c")
+      .select("current_price, 1d_pct, 1d_abs, timestamp")
+      .eq("security_id", security.id)
+      .order("timestamp", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (intradayError && intradayError.code !== 'PGRST116') {
+      // PGRST116 is "no rows found" which is acceptable
+      console.error(`❌ Error fetching intraday data for ${symbol}:`, intradayError);
+    }
+
+    const processedSecurity = {
+      ...security,
+      id: security.id,
+      currentPrice: intradayData?.current_price ? Number(intradayData.current_price) / 100 : null,
+      changePct: intradayData?.["1d_pct"] != null ? Number(intradayData["1d_pct"]) : null,
+      changeAbs: intradayData?.["1d_abs"] != null ? Number(intradayData["1d_abs"]) / 100 : null,
+      last_price: intradayData?.current_price ? Number(intradayData.current_price) / 100 : null,
+      change_percentage: intradayData?.["1d_pct"],
+    };
+
     console.log(`✅ Processed ${symbol} — price: ${processedSecurity.currentPrice}, changePct: ${processedSecurity.changePct}`);
     return processedSecurity;
   } catch (error) {
@@ -152,13 +203,8 @@ export const getSecurityBySymbol = async (symbol) => {
 
 /**
  * Get price history for a security based on timeframe.
- *
- * Strategy:
- *   1. Query security_metrics for all daily rows within the date range.
- *      This grows naturally as the nightly script runs each day.
- *   2. If fewer than 2 rows exist (data still bootstrapping), fall back to a
- *      2-point chart using the reference anchor price already embedded in the
- *      latest security_metrics row (e.g. "1W_Price"/"1W_Date" → last_close/as_of_date).
+ * Fetches daily prices from stock_returns_c (current_price, divided by 100 for Rands)
+ * Adjusts the query based on the selected timeframe.
  *
  * @param {string} securityId - The security UUID (securities.id)
  * @param {string} timeframe  - One of: "1D", "1W", "1M", "3M", "6M", "YTD", "1Y"
@@ -194,9 +240,10 @@ export const getSecurityPrices = async (securityId, timeframe = "1M") => {
       cutoffDate = d.toISOString().split("T")[0];
     }
 
-    const { data: historicalRows, error } = await supabase
-      .from("security_metrics_c")
-      .select("as_of_date, last_close")
+    // Fetch price history from stock_returns_c using current_price
+    const { data: returnsRows, error } = await supabase
+      .from("stock_returns_c")
+      .select("as_of_date, current_price")
       .eq("security_id", securityId)
       .gte("as_of_date", cutoffDate)
       .order("as_of_date", { ascending: true });
@@ -208,35 +255,32 @@ export const getSecurityPrices = async (securityId, timeframe = "1M") => {
 
     let prices = [];
 
-    if (historicalRows && historicalRows.length >= 2) {
-      // ── Enough daily history — use it directly ───────────────
-      prices = historicalRows.map(row => ({
+    if (returnsRows && returnsRows.length >= 2) {
+      // ── Use stock returns data adjusted by timeframe ───────────────────
+      prices = returnsRows.map(row => ({
         ts: row.as_of_date,
-        close: row.last_close != null ? Number(row.last_close) : null,
+        close: row.current_price != null ? Number(row.current_price) / 100 : null,
       }));
-      console.log(`✅ Fetched ${prices.length} historical rows for ${timeframe}`);
+      console.log(`✅ Fetched ${prices.length} price points from stock_returns_c for ${timeframe}`);
     } else {
-      // ── Fallback: 2-point chart from reference prices in the view ─
-      console.log(`⚠️ Insufficient history (${historicalRows?.length ?? 0} rows) — building 2-point chart from reference prices`);
+      // ── Fallback: Get latest price from stock_returns_c ─
+      console.log(`⚠️ Insufficient history (${returnsRows?.length ?? 0} rows) — using latest price`);
 
-      const refCols = TIMEFRAME_REF_COLS[timeframe] ?? TIMEFRAME_REF_COLS["1M"];
-      const selectCols = `as_of_date, close_price, ${refCols.date}, ${refCols.price}`;
-
-      const { data: refRow, error: refError } = await supabase
-        .from("v_latest_security_metrics")
-        .select(selectCols)
+      const { data: latestReturns, error: latestError } = await supabase
+        .from("stock_returns_c")
+        .select("as_of_date, current_price")
         .eq("security_id", securityId)
+        .order("as_of_date", { ascending: false })
         .limit(1)
         .single();
 
-      if (!refError && refRow && refRow[refCols.date] && refRow[refCols.price]) {
+      if (!latestError && latestReturns && latestReturns.current_price) {
         prices = [
-          { ts: refRow[refCols.date],  close: Number(refRow[refCols.price]) },
-          { ts: refRow.as_of_date,     close: Number(refRow.close_price)    },
+          { ts: latestReturns.as_of_date, close: Number(latestReturns.current_price) / 100 },
         ];
-        console.log(`✅ Built 2-point chart: ${prices[0].ts} → ${prices[1].ts}`);
+        console.log(`✅ Using latest price: ${latestReturns.as_of_date}`);
       } else {
-        console.warn(`⚠️ No reference price data available for ${securityId}`);
+        console.warn(`⚠️ No price data available for ${securityId}`);
       }
     }
 

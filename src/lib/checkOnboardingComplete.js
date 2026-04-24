@@ -18,6 +18,8 @@ export function parseOnboardingFlags(record) {
   let riskDone = false;
   let sofDone = false;
   let termsDone = false;
+  let bankLetterDone = false;
+  let addressDone = false;
 
   let raw = {};
   if (record?.sumsub_raw) {
@@ -29,6 +31,8 @@ export function parseOnboardingFlags(record) {
   // Always check for the new tax step explicitly from the raw data.
   // Old users who are 'onboarding_complete' won't have this flag.
   taxDone = !!raw?.tax_details_saved;
+  bankLetterDone = !!raw?.bank_letter_uploaded;
+  addressDone = !!raw?.address_saved;
 
   // If user has a legacy 'onboarding_complete' status, or has a signature
   // timestamp, we can grandfather them in for all the steps.
@@ -39,10 +43,13 @@ export function parseOnboardingFlags(record) {
   if (hasCompletedOldFlow) {
     taxDone = true;
     bankDone = true;
+    bankLetterDone = true;
     mandateAgreed = true;
     riskDone = true;
     sofDone = true;
     termsDone = true;
+    bankLetterDone = true;
+    addressDone = true;
     agreementSigned = true;
   } else {
     // For new users or users still in-progress, check each flag individually.
@@ -54,8 +61,8 @@ export function parseOnboardingFlags(record) {
   }
 
   // ALL steps must be complete — KYC identity AND all financial onboarding steps including tax and final agreement
-  const allComplete = kycDone && taxDone && bankDone && mandateAgreed && riskDone && sofDone && termsDone && agreementSigned;
-  return { kycDone, taxDone, bankDone, mandateAgreed, riskDone, sofDone, termsDone, agreementSigned, allComplete };
+  const allComplete = kycDone && taxDone && bankDone && bankLetterDone && addressDone && mandateAgreed && riskDone && sofDone && termsDone && agreementSigned;
+  return { kycDone, taxDone, bankDone, bankLetterDone, addressDone, mandateAgreed, riskDone, sofDone, termsDone, agreementSigned, allComplete };
 }
 
 /**

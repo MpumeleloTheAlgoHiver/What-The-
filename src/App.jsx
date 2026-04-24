@@ -2011,7 +2011,7 @@ const App = () => {
         >
           <CreditApplyPage
             onBack={goBack}
-            onTabChange={setCurrentPage}
+            onTabChange={navigateTo}
             onOpenNotifications={() => {
               setNotificationReturnPage("creditApply");
               navigateTo("notifications");
@@ -2034,7 +2034,7 @@ const App = () => {
       >
         <UnsecuredCreditDashboard
           profile={profile}
-          onTabChange={setCurrentPage}
+          onTabChange={navigateTo}
           onOpenNotifications={() => {
             setNotificationReturnPage("unsecuredCreditDashboard");
             navigateTo("notifications");

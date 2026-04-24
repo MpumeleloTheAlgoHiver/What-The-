@@ -231,8 +231,11 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
       : (loan?.status ? String(loan.status).replace(/_/g, " ") : "Unknown");
 
   // ─── Display rate strings ────────────────────────────────────────────────
-  const annualRate  = "60%";
-  const monthlyRate = "5%";
+  const monthlyRatePct = 4.5;
+  const maxEffectiveRatePct = 27;
+  const effectiveRatePct = Math.min(maxEffectiveRatePct, Math.max(0, months * monthlyRatePct));
+  const annualRate = `${Number.isInteger(effectiveRatePct) ? effectiveRatePct.toFixed(0) : effectiveRatePct.toFixed(1)}%`;
+  const monthlyRate = `${monthlyRatePct}%`;
   const canStartNewLoan = !loan || loanBalance <= 0;
 
   // ─── helpers ─────────────────────────────────────────────────────────────
@@ -307,8 +310,8 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
         "the right to dispute incorrect information with any credit bureau. You may settle this agreement early",
         "at any time (NCA s125). In the event of debt review, contact an NCR-registered debt counsellor.",
         "",
-        "INTEREST RATE DISCLOSURE: The interest rate applied is 5% per month (60% per annum), which is the",
-        "maximum permissible rate under the NCA for unsecured short-term credit agreements.",
+        `INTEREST RATE DISCLOSURE: The interest rate applied is ${monthlyRate} per month with an effective rate of ${annualRate}`,
+        `for this ${months || 0}-month unsecured short-term credit agreement.`,
       ];
       complianceLines.forEach((line) => {
         doc.text(line, 15, y);
@@ -361,7 +364,7 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
         head: [["Item", "Rate / Detail", "Amount (ZAR)"]],
         body: [
           ["Principal amount disbursed", "—", formatZar(principal)],
-          ["Interest (5% p.m. on reducing balance)", "60% p.a. — NCA s105 max rate", formatZar(totalInterest)],
+          ["Interest (4.5% p.m. on reducing balance)", `${annualRate} over ${months || 0} months (max 27%)`, formatZar(totalInterest)],
           ["Monthly admin fee × " + months, "R69.00 per month (fixed)", formatZar(totalAdminFees)],
           ["", "", ""],
           [{ content: "TOTAL COST OF CREDIT (TCC)", styles: { fontStyle: "bold" } }, { content: "Interest + admin fees", styles: {} }, { content: formatZar(totalRepay - principal), styles: { fontStyle: "bold" } }],
@@ -383,7 +386,7 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
           ["Monthly instalment (principal + interest)", formatZar(monthlyPay)],
           ["Loan term", months > 0 ? `${months} month${months > 1 ? "s" : ""}` : "—"],
           ["First repayment date", loan.first_repayment_date ? fmtDate(new Date(loan.first_repayment_date)) : "—"],
-          ["Interest rate", "5% per month (60% p.a.)"],
+          ["Interest rate", `${monthlyRate} per month (${annualRate} over ${months || 0} months, max 27%)`],
           ["Amount already repaid", formatZar(totalPaid)],
           ["Outstanding balance", formatZar(loanBalance)],
         ],
@@ -754,7 +757,7 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
           <div className="bg-white border border-slate-100 rounded-[20px] p-4 shadow-sm">
             <p className="text-[10px] text-slate-400 mb-1">Interest rate</p>
             <p className="text-[18px] font-medium text-slate-900">{monthlyRate} p.m.</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">{annualRate} p.a. — NCR max</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{annualRate} over {months > 0 ? `${months} months` : "term"}</p>
             <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 bg-emerald-50 text-emerald-700">
               Unsecured
             </span>

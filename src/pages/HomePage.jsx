@@ -123,28 +123,27 @@ const HomePage = ({
     try {
       const { data: holdings, error: holdingsError } = await supabase
         .from('stock_holdings_c')
-        .select('id, security_id, quantity, avg_fill, market_value, unrealized_pnl, Status')
+        .select('id, security_id, strategy_id, quantity, avg_fill, market_value, unrealized_pnl, Status')
         .eq('user_id', profile.id)
         .eq('Status', 'active');
 
       if (holdingsError) throw holdingsError;
 
-      if (holdings && holdings.length > 0) {
-        setHasAnyHoldings(true);
+      const directHoldings = (holdings || []).filter(h => !h.strategy_id && h.security_id);
+      const strategyHoldings = (holdings || []).filter(h => h.strategy_id);
+
+      if (holdings && holdings.length > 0) setHasAnyHoldings(true);
+
+      if (directHoldings.length > 0) {
+        const holdings = directHoldings;
         const securityIds = holdings.map(h => h.security_id).filter(Boolean);
         let securitiesMap = {};
-        let metricsMap = {};
         if (securityIds.length > 0) {
-          const [secResult, metResult] = await Promise.all([
-            supabase.from('securities_c').select('id, symbol, name, logo_url, last_price').in('id', securityIds),
-            supabase.from('security_metrics_c').select('security_id, change_pct').in('security_id', securityIds),
-          ]);
-          if (secResult.data) {
-            secResult.data.forEach(s => { securitiesMap[s.id] = s; });
-          }
-          if (metResult.data) {
-            metResult.data.forEach(m => { metricsMap[m.security_id] = m.change_pct || 0; });
-          }
+          const { data: secData } = await supabase
+            .from('securities_c')
+            .select('id, symbol, name, logo_url, last_price, change_percent')
+            .in('id', securityIds);
+          (secData || []).forEach(s => { securitiesMap[s.id] = s; });
         }
 
         const formatted = holdings
@@ -166,8 +165,11 @@ const HomePage = ({
                 isPending: true,
               };
             }
-            const livePrice = Number(sec.last_price || avgFill);
-            const marketVal = (livePrice * qty) / 100;
+            // last_price is in rands; avg_fill is in cents — normalize live price to cents.
+            const livePriceCents = sec.last_price != null
+              ? Math.round(Number(sec.last_price) * 100)
+              : avgFill;
+            const marketVal = (livePriceCents * qty) / 100;
             const costBasis = (avgFill * qty) / 100;
             const pnlRands = marketVal - costBasis;
             const pnlPct = costBasis > 0 ? ((pnlRands / costBasis) * 100) : 0;
@@ -176,7 +178,7 @@ const HomePage = ({
               name: sec.name,
               logo: sec.logo_url,
               value: marketVal,
-              change: metricsMap[h.security_id] || 0,
+              change: Number(sec.change_percent) || 0,
               pnlRands,
               pnlPct,
             };
@@ -187,6 +189,50 @@ const HomePage = ({
         const sorted = [...profitable, ...pending].slice(0, 5);
         setLocalBestAssets(sorted);
         return;
+      }
+
+      // No direct holdings — rank the underlying securities inside the user's strategy investments.
+      if (strategyHoldings.length > 0) {
+        const securityIds = [...new Set(strategyHoldings.map(h => h.security_id).filter(Boolean))];
+        if (securityIds.length > 0) {
+          const { data: secData } = await supabase
+            .from('securities_c')
+            .select('id, symbol, name, logo_url, last_price, change_percent')
+            .in('id', securityIds);
+          const secMap = Object.fromEntries((secData || []).map(s => [s.id, s]));
+
+          const formatted = strategyHoldings
+            .filter(h => secMap[h.security_id])
+            .map(h => {
+              const sec = secMap[h.security_id];
+              const qty = Number(h.quantity || 0);
+              const avgFill = Number(h.avg_fill || 0);
+              const livePriceCents = sec.last_price != null
+                ? Math.round(Number(sec.last_price) * 100)
+                : avgFill;
+              const marketVal = (livePriceCents * qty) / 100;
+              const costBasis = (avgFill * qty) / 100;
+              const pnlRands = marketVal - costBasis;
+              const pnlPct = costBasis > 0 ? ((pnlRands / costBasis) * 100) : 0;
+              return {
+                symbol: sec.symbol,
+                name: sec.name,
+                logo: sec.logo_url,
+                value: marketVal,
+                change: Number(sec.change_percent) || 0,
+                pnlRands,
+                pnlPct,
+                isPending: !avgFill,
+              };
+            });
+
+          const profitable = formatted.filter(a => !a.isPending && a.pnlPct > 0).sort((a, b) => b.pnlPct - a.pnlPct);
+          const ranked = profitable.slice(0, 5);
+          if (ranked.length > 0) {
+            setLocalBestAssets(ranked);
+            return;
+          }
+        }
       }
 
       const { data: allocData, error: allocError } = await supabase
@@ -201,18 +247,12 @@ const HomePage = ({
       if (allocData && allocData.length > 0) {
         const securityIds = allocData.map(item => item.security_id).filter(Boolean);
         let securitiesMap = {};
-        let metricsMap = {};
         if (securityIds.length > 0) {
-          const [secResult, metResult] = await Promise.all([
-            supabase.from('securities_c').select('id, symbol, name, logo_url').in('id', securityIds),
-            supabase.from('security_metrics_c').select('security_id, change_pct').in('security_id', securityIds),
-          ]);
-          if (secResult.data) {
-            secResult.data.forEach(s => { securitiesMap[s.id] = s; });
-          }
-          if (metResult.data) {
-            metResult.data.forEach(m => { metricsMap[m.security_id] = m.change_pct || 0; });
-          }
+          const { data: secData } = await supabase
+            .from('securities_c')
+            .select('id, symbol, name, logo_url, change_percent')
+            .in('id', securityIds);
+          (secData || []).forEach(s => { securitiesMap[s.id] = s; });
         }
 
         const formatted = allocData
@@ -224,7 +264,7 @@ const HomePage = ({
               name: sec.name,
               logo: sec.logo_url,
               value: item.value,
-              change: metricsMap[item.security_id] || 0,
+              change: Number(sec.change_percent) || 0,
             };
           });
 
@@ -729,7 +769,7 @@ const HomePage = ({
             {[
               { label: "Family", icon: Users, onClick: onOpenFamily, comingSoon: false },
               { label: "Stokvel", icon: Handshake, onClick: null, comingSoon: true },
-              { label: "Insure", icon: Umbrella, onClick: null, comingSoon: true },
+              { label: "Insure", icon: Umbrella, onClick: INSURE_ENABLED ? onOpenInsure : null, comingSoon: !INSURE_ENABLED },
               { label: "Rewards", icon: Gift, onClick: null, comingSoon: true },
             ].map((item, index) => {
               const Icon = item.icon;

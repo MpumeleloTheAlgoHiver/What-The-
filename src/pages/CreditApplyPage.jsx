@@ -18,7 +18,7 @@ const normalizeLoanType = (value, fallback = "unsecured") => {
 // --- Subcomponents for Stages ---
 
 // Stage 1: TruID Connect (in-app iframe)
-const ConnectionStage = ({ onComplete, onError }) => {
+const ConnectionStage = ({ onComplete, onError, autoStart = false }) => {
    const [status, setStatus] = useState("idle");
    const [message, setMessage] = useState("");
    const [consumerUrl, setConsumerUrl] = useState(null);
@@ -70,6 +70,12 @@ const ConnectionStage = ({ onComplete, onError }) => {
          onError(err.message);
       }
    };
+
+   useEffect(() => {
+      if (autoStart && status === "idle") {
+         startSession();
+      }
+   }, [autoStart, status]);
 
    const handleCancel = useCallback(() => {
       if (pollingRef.current) {
@@ -495,7 +501,7 @@ const EnrichmentStage = ({ onSubmit, defaultValues, employerOptions, employerLoc
 
 
 // Stage 3: Results
-const ResultStage = ({ score, isCalculating, engineFailed, breakdown, engineResult, onRunAssessment, onContinue }) => {
+const ResultStage = ({ score, isCalculating, engineFailed, breakdown, engineResult, onRunAssessment, onContinue, isPrefetching = false, onReapply }) => {
    const [showAllData, setShowAllData] = useState(false);
    const [loaderValue, setLoaderValue] = useState(0);
 
@@ -566,6 +572,20 @@ const ResultStage = ({ score, isCalculating, engineFailed, breakdown, engineResu
    const statusText = hasAssessment
       ? (engineFailed ? "Error" : isCalculating ? statusMessages[messageIndex] : "Trust Score")
       : "Start Check";
+
+   if (isPrefetching) {
+      return (
+         <MintCard className="animate-in zoom-in-95 duration-500 min-h-[360px]">
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+               <div className="h-16 w-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
+                  <Loader2 className="h-7 w-7 animate-spin" />
+               </div>
+               <p className="text-sm font-semibold text-slate-800">Fetching Assessment Result</p>
+               <p className="text-xs text-slate-500 mt-1">Loading your latest credit engine score...</p>
+            </div>
+         </MintCard>
+      );
+   }
 
 
    return (
@@ -794,6 +814,16 @@ const ResultStage = ({ score, isCalculating, engineFailed, breakdown, engineResu
                      {isDeclined ? "Loan declined" : "Continue to loan configuration"}
                   </button>
                )}
+
+               {isDeclined && onReapply && (
+                  <button
+                     type="button"
+                     onClick={onReapply}
+                     className="w-full mt-2 py-3 rounded-full border border-slate-300 bg-white text-slate-700 text-xs font-semibold uppercase tracking-[0.16em]"
+                  >
+                     Reapply
+                  </button>
+               )}
             </div>
          )}
       </MintCard>
@@ -819,28 +849,25 @@ const LoanCalculatorStep = ({ onSignedContinue }) => {
       return Math.round((limited - min) / step) * step + min;
    };
 
-   // ── NCA Short-term credit fee engine ──
-   // Interest: 5% per month (NCA max for short-term unsecured ≤6mo)
+   // ── NCA short-term credit fee engine ──
+   // Interest base rate: 4.5% per month (capped at 27% effective)
    // Admin/service fee: R69 per month (fixed)
    // No initiation fee, no credit life insurance
-   const MONTHLY_RATE = 0.05; // 5% per month (60% p.a.)
+   const MONTHLY_RATE = 0.045; // 4.5% per month
+   const MAX_EFFECTIVE_RATE_PCT = 27;
 
    const monthlyServiceFee = 69; // Admin fee fixed at R69 per month
 
-   // Amortized monthly payment (principal + interest only)
-   const monthlyPrincipalInterest = (() => {
-      const r = MONTHLY_RATE;
-      const n = loanPeriod;
-      const numerator = loanAmount * r * Math.pow(1 + r, n);
-      const denominator = Math.pow(1 + r, n) - 1;
-      return denominator > 0 ? numerator / denominator : loanAmount;
-   })();
+   const effectiveInterestRatePct = Math.min(
+      MAX_EFFECTIVE_RATE_PCT,
+      MONTHLY_RATE * loanPeriod * 100
+   );
 
-   const totalInterest = Math.max(0, monthlyPrincipalInterest * loanPeriod - loanAmount);
+   const totalInterest = Math.max(0, loanAmount * (effectiveInterestRatePct / 100));
    const totalServiceFees = monthlyServiceFee * loanPeriod;
    const totalCostOfCredit = totalInterest + totalServiceFees;
    const totalRepayable = loanAmount + totalCostOfCredit;
-   const monthlyPayment = monthlyPrincipalInterest + monthlyServiceFee;
+   const monthlyPayment = loanPeriod > 0 ? (totalRepayable / loanPeriod) : 0;
 
    const [showFees, setShowFees] = useState(false);
    const [showContract, setShowContract] = useState(false);
@@ -1282,7 +1309,7 @@ const LoanCalculatorStep = ({ onSignedContinue }) => {
             {showFees && (
                <div className="mt-3 space-y-0 animate-in fade-in slide-in-from-top-2 duration-300">
                   {[
-                     { label: "Interest (5% p.m.)",       value: `R ${formatMoney(totalInterest)}` },
+                     { label: "Interest (4.5% p.m.)",       value: `R ${formatMoney(totalInterest)}` },
                      { label: "Admin fees (R69 × " + loanPeriod + ")", value: `R ${formatMoney(totalServiceFees)}` },
                   ].map((row, i, arr) => (
                      <div key={row.label} className={`flex items-center justify-between py-2 ${i < arr.length - 1 ? "border-b border-dashed border-slate-100" : ""}`}>
@@ -1300,7 +1327,7 @@ const LoanCalculatorStep = ({ onSignedContinue }) => {
             {/* NCA compliance inline */}
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-               <span className="text-[11px] font-medium text-slate-500">NCA-compliant · Interest: <strong className="text-slate-700">5% p.m.</strong> (60% p.a.)</span>
+               <span className="text-[11px] font-medium text-slate-500">NCA-compliant · Interest: <strong className="text-slate-700">4.5% p.m.</strong> ({effectiveInterestRatePct.toFixed(0)}% over {loanPeriod} months, max 27%)</span>
             </div>
          </div>
 
@@ -1344,7 +1371,7 @@ const LoanCalculatorStep = ({ onSignedContinue }) => {
 
                      <div className="space-y-3 text-[12px] text-slate-600 leading-relaxed">
                         <p><strong className="text-slate-800">1. Facility:</strong> This unsecured credit facility is granted subject to affordability, identity verification, and final approval checks.</p>
-                        <p><strong className="text-slate-800">2. Pricing:</strong> Interest is charged at 5% per month in line with the NCA short-term credit category, plus a fixed R69 monthly admin fee.</p>
+                        <p><strong className="text-slate-800">2. Pricing:</strong> Interest is charged at 4.5% per month (effective {effectiveInterestRatePct.toFixed(0)}% for this {loanPeriod}-month term, capped at 27%), plus a fixed R69 monthly admin fee.</p>
                         <p><strong className="text-slate-800">3. Fees Breakdown:</strong> Admin fees R {formatMoney(totalServiceFees)}, total interest R {formatMoney(totalInterest)}.</p>
                         <p><strong className="text-slate-800">4. Payment Obligation:</strong> You agree to pay the installment on scheduled due dates. Missed payments may incur default collection processes as permitted by law.</p>
                         <p><strong className="text-slate-800">5. Early Settlement:</strong> You may settle early in accordance with the National Credit Act and receive an adjusted settlement quote where applicable.</p>
@@ -1413,6 +1440,10 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
    const [loanApplications, setLoanApplications] = useState([]);
    const [loadingLoans, setLoadingLoans] = useState(true);
    const [showDetails, setShowDetails] = useState(false);
+   const [isCheckingTruIDRecords, setIsCheckingTruIDRecords] = useState(false);
+   const [autoStartTruID, setAutoStartTruID] = useState(false);
+   const [isPrefetchingAssessment, setIsPrefetchingAssessment] = useState(false);
+   const [autoAdvanceFromExistingScore, setAutoAdvanceFromExistingScore] = useState(false);
    const autoAdvanceTimerRef = useRef(null);
 
    // Real Hook Integration
@@ -1500,15 +1531,16 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
 
          if (existingStep3Data?.id) {
             const existingScore = Number(existingStep3Data.engine_score ?? 0);
-            // Always hydrate so ResultStage shows previous result (prevents re-run)
-            hydrateExistingScore(existingStep3Data);
-            if (existingScore >= 50) {
-               setStep(4);
-            } else {
-               // Declined — stay on step 3 results screen
-               setStep(3);
-            }
+            setStep(3);
             setResolving(false);
+            setIsPrefetchingAssessment(true);
+
+            setTimeout(() => {
+               hydrateExistingScore(existingStep3Data);
+               setIsPrefetchingAssessment(false);
+               setAutoAdvanceFromExistingScore(existingScore >= 50);
+            }, 900);
+
             return;
          }
 
@@ -1524,34 +1556,15 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
 
          const checkpointStep = Number(latestLoan?.step_number || 0);
 
-         // 3. If checkpoint says step 3, go straight there
+         // 3. If checkpoint says step 3, show assessment step
          if (checkpointStep >= 3) {
             setStep(3);
             setResolving(false);
             return;
          }
 
-         // 4. If checkpoint says step 2, or bank is linked, check employment too
-         if (checkpointStep >= 2 || snapshot || bankLinked) {
-            const { data: empSnap } = await supabase
-               .from("loan_engine_score")
-               .select("years_current_employer,contract_type,is_new_borrower,employment_sector,employer_name")
-               .eq("user_id", userId)
-               .order("created_at", { ascending: false })
-               .limit(1)
-               .maybeSingle();
-
-            const hasEmployment = Number.isFinite(Number(empSnap?.years_current_employer))
-               && Boolean(empSnap?.contract_type)
-               && typeof empSnap?.is_new_borrower === "boolean"
-               && Boolean(empSnap?.employment_sector)
-               && Boolean(empSnap?.employer_name);
-
-            setStep(hasEmployment ? 3 : 2);
-            setResolving(false);
-            return;
-         }
-
+         // 4. Do not auto-resume to step 2 from in-progress drafts.
+         //    Users should intentionally start at step 1 from the intro screen.
          // 5. Fresh user — stay on step 0
          setResolving(false);
       };
@@ -1559,32 +1572,24 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
       resolveCheckpoint();
    }, [resolving, loadingProfile, snapshot, bankLinked, hydrateExistingScore]);
 
+   useEffect(() => {
+      if (!autoAdvanceFromExistingScore || isPrefetchingAssessment || step !== 3) return;
+      if (score < 50) return;
+
+      const timer = setTimeout(() => {
+         setStep(4);
+         setAutoAdvanceFromExistingScore(false);
+      }, 1800);
+
+      return () => clearTimeout(timer);
+   }, [autoAdvanceFromExistingScore, isPrefetchingAssessment, step, score]);
+
 
 
    useEffect(() => {
       if (loadingProfile || checkedExistingScore) return;
-
-      const checkExistingScore = async () => {
-         if (!supabase) return;
-         const { data: sessionData } = await supabase.auth.getSession();
-         const userId = sessionData?.session?.user?.id;
-         if (!userId) return;
-
-         const { data: scoreData } = await supabase
-            .from("loan_engine_score")
-            .select("engine_score")
-            .eq("user_id", userId)
-            .order("run_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-         if (Number.isFinite(scoreData?.engine_score) && scoreData.engine_score >= 50 && onComplete) {
-            onComplete();
-         }
-      };
-
-      checkExistingScore().finally(() => setCheckedExistingScore(true));
-   }, [loadingProfile, checkedExistingScore, onComplete]);
+      setCheckedExistingScore(true);
+   }, [loadingProfile, checkedExistingScore]);
 
    useEffect(() => {
       const loadLoanApplications = async () => {
@@ -1608,13 +1613,81 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
       loadLoanApplications().finally(() => setLoadingLoans(false));
    }, []);
 
-   const handleStart = () => {
-      if (snapshot || bankLinked) {
-         setStep(2);
-      } else {
+   const handleStart = async () => {
+      setIsCheckingTruIDRecords(true);
+      setAutoStartTruID(false);
+
+      try {
+         if (!supabase) {
+            setStep(1);
+            setAutoStartTruID(true);
+            return;
+         }
+
+         const { data: sessionData } = await supabase.auth.getSession();
+         const userId = sessionData?.session?.user?.id;
+
+         if (!userId) {
+            setStep(1);
+            setAutoStartTruID(true);
+            return;
+         }
+
+         const { data: existingSnapshot } = await supabase
+            .from("truid_bank_snapshots")
+            .select("id")
+            .eq("user_id", userId)
+            .order("captured_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+         if (existingSnapshot?.id) {
+            setStep(2);
+         } else {
+            setStep(1);
+            setAutoStartTruID(true);
+         }
+      } catch (error) {
+         console.warn("TruID snapshot check failed:", error?.message || error);
          setStep(1);
+         setAutoStartTruID(true);
+      } finally {
+         setIsCheckingTruIDRecords(false);
       }
    };
+
+   const handleWizardBack = useCallback(() => {
+      const navigateBackInApp = () => {
+         if (onBack) {
+            onBack();
+            return;
+         }
+
+         if (typeof onTabChange === "function") {
+            onTabChange("home");
+            return;
+         }
+
+         window.dispatchEvent(new CustomEvent("navigate-within-app", { detail: { page: "home" } }));
+      };
+
+      if (step === "bank_success") {
+         navigateBackInApp();
+         return;
+      }
+
+      if (typeof step !== "number") {
+         navigateBackInApp();
+         return;
+      }
+
+      if (step > 0) {
+         setStep(Math.max(0, step - 1));
+         return;
+      }
+
+      navigateBackInApp();
+   }, [step, onBack, onTabChange]);
 
    const handleConnectionComplete = (collectionId, snapshotData) => {
       if (snapshotData) {
@@ -1763,12 +1836,12 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
             };
 
             // ── Full payload matching loan_application schema ─────────────────
-            // interest_rate stored as monthly % (5.00 = 5% p.m., NCR max for short-term)
+            // interest_rate stored as monthly % (4.50 = 4.5% p.m., max 27% effective)
             // step_number max allowed by CHECK constraint is 4
             const payload = {
                principal_amount: Math.round((quote?.loanAmount ?? 0) * 100) / 100,
                amount_repayable: Math.round((quote?.totalRepayable ?? 0) * 100) / 100,
-               interest_rate: 5.00,           // 5% per month (NCR max for unsecured short-term)
+               interest_rate: 4.50,           // 4.5% per month (max 27% effective)
                number_of_months: months,
                first_repayment_date: firstRepaymentDateStr,
                salary_date: salaryDayOfMonth, // day-of-month (1–31)
@@ -1878,7 +1951,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
 
                <div className="px-6 pb-6 pt-2 w-full flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm">
                   <button
-                     onClick={() => onBack ? onBack() : window.history.back()}
+                     onClick={handleWizardBack}
                      className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-95 z-30"
                   >
                      <ArrowLeft className="h-5 w-5" />
@@ -1900,7 +1973,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
                   </p>
                   <button
                      type="button"
-                     onClick={() => onBack ? onBack() : window.history.back()}
+                     onClick={handleWizardBack}
                      className="inline-flex items-center justify-center rounded-full bg-[#160d2a] px-8 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-lg shadow-violet-950/25 transition hover:-translate-y-0.5 active:scale-95"
                   >
                      Done
@@ -1960,7 +2033,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
 
                   <div className="px-6 pb-6 pt-2 w-full flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm">
                      <button
-                        onClick={() => onBack ? onBack() : window.history.back()}
+                        onClick={handleWizardBack}
                         className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-95 z-30"
                      >
                         <ArrowLeft className="h-5 w-5" />
@@ -2032,12 +2105,21 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
                      </div>
                   )}
 
-                  <button
-                     onClick={handleStart}
-                     className="w-full py-4 bg-[#160d2a] text-white rounded-full text-sm font-bold uppercase tracking-widest shadow-xl shadow-violet-950/30 active:scale-95 transition-all mt-4"
-                  >
-                     Initiate Application
-                  </button>
+                  {isCheckingTruIDRecords ? (
+                     <div className="w-full mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 flex items-center justify-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">
+                           Checking TruID records...
+                        </p>
+                     </div>
+                  ) : (
+                     <button
+                        onClick={handleStart}
+                        className="w-full py-4 bg-[#160d2a] text-white rounded-full text-sm font-bold uppercase tracking-widest shadow-xl shadow-violet-950/30 active:scale-95 transition-all mt-4"
+                     >
+                        Initiate Application
+                     </button>
+                  )}
 
                   <footer className="mt-8 text-center opacity-40">
                      <p className="text-[8px] uppercase tracking-tighter text-slate-500 max-w-[340px] mx-auto leading-relaxed">
@@ -2048,7 +2130,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
                </div>
             );
          case 1:
-            return <ConnectionStage onComplete={handleConnectionComplete} onError={() => { }} />;
+            return <ConnectionStage onComplete={handleConnectionComplete} onError={() => { }} autoStart={autoStartTruID} />;
          case 2:
             return <EnrichmentStage
                defaultValues={enrichmentDefaults}
@@ -2068,6 +2150,11 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
                engineResult={engineResult}
                onRunAssessment={handleRunAssessment}
                onContinue={() => setStep(4)}
+               isPrefetching={isPrefetchingAssessment}
+               onReapply={() => {
+                  setStep(1);
+                  setAutoAdvanceFromExistingScore(false);
+               }}
             />;
          case 4:
             return <LoanCalculatorStep onSignedContinue={handleLoanAgreementAccepted} />;
@@ -2117,7 +2204,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
          title={getTitle()}
          subtitle={step === 1 ? "We need to verify your income via your primary bank account." : step === 2 ? "Review the details we found." : step === 4 ? "Configure your loan and sign your agreement." : ""}
          stepInfo={getStepInfo()}
-         onBack={() => onBack ? onBack() : window.history.back()}
+         onBack={handleWizardBack}
       >
          {renderContent()}
       </MintGradientLayout>

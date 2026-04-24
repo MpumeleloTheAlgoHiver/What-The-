@@ -70,7 +70,7 @@ export default async function handler(req, res) {
 
     // 3. Fetch strategy + holdings
     const { data: strategy, error: stratErr } = await db
-      .from("strategies")
+      .from("strategies_c")
       .select("id, name, holdings, min_investment, is_active")
       .eq("id", strategy_id)
       .maybeSingle();

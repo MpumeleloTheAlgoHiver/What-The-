@@ -240,9 +240,15 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
           {feeExpanded && (
             <div className="px-4 pb-4 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-600">Investment Amount</p>
+                <div className="flex items-center gap-1 group relative">
+                  <p className="text-xs text-slate-600">Investment Amount</p>
+                  <span className="text-xs text-slate-400">*</span>
+                  <div className="absolute bottom-full left-0 mb-2 px-2 py-1 bg-white text-violet-600 text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10 shadow-md border border-violet-100">
+                    Includes 8% cash reserve
+                  </div>
+                </div>
                 <p className="text-xs font-semibold text-slate-900">
-                  {formatCurrency(amount, currency)}
+                  {formatCurrency(fees.bufferedBase, currency)}
                 </p>
               </div>
               <div className="flex items-center justify-between">

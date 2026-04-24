@@ -2840,7 +2840,7 @@ app.post("/api/record-investment", async (req, res) => {
       console.log("[record-investment] Strategy investment detected - strategyId:", strategyId);
 
       const { data: strategyData, error: stratError } = await db
-        .from("strategies")
+        .from("strategies_c")
         .select("holdings")
         .eq("id", strategyId)
         .maybeSingle();
@@ -2996,10 +2996,10 @@ app.post("/api/record-investment", async (req, res) => {
       } else {
         console.log("[record-investment] No last_price in securities, checking security_prices table");
         const { data: priceData, error: priceError } = await db
-          .from("security_prices")
-          .select("close_price")
+          .from("stock_returns_c")
+          .select("current_price")
           .eq("security_id", securityId)
-          .order("price_date", { ascending: false })
+          .order("as_of_date", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -3326,7 +3326,7 @@ app.post("/api/confirm-eft-deposit", async (req, res) => {
     } catch (_) { }
 
     if (isStrategyInvestment && securityId) {
-      const { data: strategyData } = await db.from("strategies").select("holdings").eq("id", strategyId).maybeSingle();
+      const { data: strategyData } = await db.from("strategies_c").select("holdings").eq("id", strategyId).maybeSingle();
       if (strategyData?.holdings?.length) {
         const symbols = strategyData.holdings.map(h => h.symbol).filter(Boolean);
         const { data: securitiesData } = await db.from("securities_c").select("id, symbol, last_price").in("symbol", symbols);
@@ -3374,8 +3374,8 @@ app.post("/api/confirm-eft-deposit", async (req, res) => {
       const { data: secData } = await db.from("securities_c").select("last_price").eq("id", securityId).maybeSingle();
       currentPriceCents = secData?.last_price ? Number(secData.last_price) : null;
       if (!currentPriceCents) {
-        const { data: priceData } = await db.from("security_prices").select("close_price").eq("security_id", securityId).order("price_date", { ascending: false }).limit(1).maybeSingle();
-        if (priceData?.close_price) currentPriceCents = Number(priceData.close_price);
+        const { data: priceData } = await db.from("stock_returns_c").select("current_price").eq("security_id", securityId).order("as_of_date", { ascending: false }).limit(1).maybeSingle();
+        if (priceData?.current_price) currentPriceCents = Number(priceData.current_price);
       }
       const priceRands = currentPriceCents ? currentPriceCents / 100 : investAmount;
       quantity = priceRands > 0 ? investAmount / priceRands : 1;
@@ -3663,10 +3663,10 @@ app.get("/api/user/holdings", async (req, res) => {
         db.from("securities_c")
           .select("id, symbol, name, logo_url, last_price, change_price, change_percent, sector, exchange")
           .in("id", securityIds),
-        db.from("security_prices")
-          .select("security_id, close_price, ts")
+        db.from("stock_returns_c")
+          .select("security_id, current_price, as_of_date")
           .in("security_id", securityIds)
-          .order("ts", { ascending: false })
+          .order("as_of_date", { ascending: false })
           .limit(securityIds.length * 2)
       ]);
 
@@ -3674,14 +3674,21 @@ app.get("/api/user/holdings", async (req, res) => {
         console.error("Error fetching securities for holdings:", secResult.error);
       }
       if (secResult.data) {
-        secResult.data.forEach(s => { securitiesMap[s.id] = s; });
+        secResult.data.forEach(s => { 
+          // Normalize to cents
+          const normalizedSec = { ...s };
+          if (s.last_price != null) normalizedSec.last_price = s.last_price * 100;
+          if (s.change_price != null) normalizedSec.change_price = s.change_price * 100;
+          securitiesMap[s.id] = normalizedSec; 
+        });
       }
 
       const pricesBySecId = {};
       (pricesResult.data || []).forEach(p => {
         if (!pricesBySecId[p.security_id]) pricesBySecId[p.security_id] = [];
         if (pricesBySecId[p.security_id].length < 2) {
-          pricesBySecId[p.security_id].push(p.close_price);
+          // Already in cents in stock_returns_c
+          pricesBySecId[p.security_id].push(p.current_price);
         }
       });
       for (const [secId, prices] of Object.entries(pricesBySecId)) {
@@ -3821,16 +3828,23 @@ app.get("/api/user/strategies", async (req, res) => {
     }
 
     const strategyNames = Array.from(strategyTxNames);
-    if (strategyNames.length === 0) {
-      return res.status(200).json({ success: true, strategies: [] });
-    }
+    console.log("[user/strategies] Transactions found:", (transactions || []).length);
+    console.log("[user/strategies] Strategy names from transactions:", strategyNames);
 
-    // Fetch user's holdings with strategy_id to compute cost basis and live value
+    // Also check stock_holdings_c for holdings with strategy_id (fallback when transactions are empty or RLS blocks them)
     const { data: userStratHoldings } = await db
       .from("stock_holdings_c")
       .select("id, security_id, strategy_id, quantity, avg_fill")
       .eq("user_id", userId)
       .not("strategy_id", "is", null);
+
+    const holdingStrategyIds = [...new Set((userStratHoldings || []).map(h => h.strategy_id).filter(Boolean))];
+    console.log("[user/strategies] Holdings with strategy_id found:", (userStratHoldings || []).length, "unique strategy IDs:", holdingStrategyIds);
+
+    if (strategyNames.length === 0 && holdingStrategyIds.length === 0) {
+      console.log("[user/strategies] No strategy names or holdings found — returning empty.");
+      return res.status(200).json({ success: true, strategies: [] });
+    }
 
     const stratHoldingsByStratId = {};
     for (const h of (userStratHoldings || [])) {
@@ -3847,7 +3861,7 @@ app.get("/api/user/strategies", async (req, res) => {
         .from("securities_c")
         .select("id, symbol, last_price")
         .in("id", stratSecIds);
-      (stratSecs || []).forEach(s => { stratLivePriceMap[s.id] = s.last_price || 0; });
+      (stratSecs || []).forEach(s => { stratLivePriceMap[s.id] = (s.last_price || 0); }); // Keep as Rands as in DB
 
       // Build per-symbol P&L from actual user holdings (skip pending - no avg_fill)
       for (const h of (userStratHoldings || [])) {
@@ -3856,19 +3870,19 @@ app.get("/api/user/strategies", async (req, res) => {
         const qty = Number(h.quantity || 0);
         const avgFill = Number(h.avg_fill || 0);
         if (!avgFill) continue;
-        const livePrice = sec.last_price || avgFill;
+        const livePrice = (sec.last_price != null) ? (sec.last_price) : (avgFill / 100);
         symbolPnlMap[sec.symbol] = {
-          pnlRands: ((livePrice - avgFill) * qty) / 100,
-          pnlPct: avgFill > 0 ? ((livePrice - avgFill) / avgFill) * 100 : 0,
-          currentValue: (livePrice * qty) / 100,
-          costBasis: (avgFill * qty) / 100,
+          pnlRands: (livePrice - (avgFill / 100)) * qty,
+          pnlPct: avgFill > 0 ? ((livePrice - (avgFill / 100)) / (avgFill / 100)) * 100 : 0,
+          currentValue: (livePrice * qty) * 100, // Send as cents
+          costBasis: (avgFill * qty), // avgFill is already cents
         };
       }
     }
 
     // Get all active strategies
     const { data: allStrategies, error: stratErr } = await db
-      .from("strategies")
+      .from("strategies_c")
       .select(`
         id, name, short_name, description, risk_level, sector, icon_url, image_url, holdings, status,
         strategy_metrics (
@@ -3908,7 +3922,11 @@ app.get("/api/user/strategies", async (req, res) => {
         .select("symbol, logo_url, name, last_price, ytd_performance")
         .in("symbol", Array.from(allHoldingSymbols));
       if (secs) {
-        secs.forEach(s => { securitiesMap[s.symbol] = s; });
+        secs.forEach(s => { 
+          const normalized = { ...s };
+          if (s.last_price != null) normalized.last_price = s.last_price * 100;
+          securitiesMap[s.symbol] = normalized; 
+        });
       }
     }
 
@@ -3921,14 +3939,15 @@ app.get("/api/user/strategies", async (req, res) => {
       console.warn("[user/strategies] Failed to import calculateYtdReturn utility:", e.message);
     }
 
-    // Match user's strategies
+    // Match user's strategies (by transaction name OR by holdings strategy_id)
     const matchedStrategies = [];
     for (const strategy of (allStrategies || [])) {
       const matchKey = strategyNames.find(sn =>
         sn.toLowerCase() === (strategy.name || "").toLowerCase() ||
         sn.toLowerCase() === (strategy.short_name || "").toLowerCase()
       );
-      if (matchKey) {
+      const matchedByHoldings = holdingStrategyIds.includes(strategy.id);
+      if (matchKey || matchedByHoldings) {
         const metrics = strategy.strategy_metrics;
         const latestMetric = Array.isArray(metrics) ? metrics[0] : metrics;
         const enrichedHoldings = (strategy.holdings || []).map(h => {
@@ -3967,9 +3986,11 @@ app.get("/api/user/strategies", async (req, res) => {
             const qty = Number(h.quantity || 0);
             const avgFill = Number(h.avg_fill || 0);
             if (!avgFill) continue;
-            const livePrice = stratLivePriceMap[h.security_id] || avgFill;
+            const livePrice = stratLivePriceMap[h.security_id] || (avgFill / 100);
+            const marketVal = (livePrice * qty); // In Rands
+            console.log(`[user/strategies] Holding: ${h.security_id}, Price: ${livePrice}, Qty: ${qty}, Value: R${marketVal}`);
             investedAmount += (avgFill * qty) / 100;
-            currentMarketValue += (livePrice * qty) / 100;
+            currentMarketValue += marketVal;
           }
         }
 
@@ -3982,6 +4003,7 @@ app.get("/api/user/strategies", async (req, res) => {
           if (dynamicYtd !== null) rytd = dynamicYtd;
         }
 
+        console.log(`[user/strategies] Strategy: ${strategy.name}, Invested: R${investedAmount}, Market: R${currentMarketValue}, YTD: ${rytd}%`);
         matchedStrategies.push({
           id: strategy.id,
           name: strategy.name,
@@ -3992,9 +4014,9 @@ app.get("/api/user/strategies", async (req, res) => {
           iconUrl: strategy.icon_url,
           imageUrl: strategy.image_url,
           holdings: enrichedHoldings,
-          investedAmount,
-          currentMarketValue,
-          currentValue: currentMarketValue,
+          investedAmount: investedAmount, // Return as Rands
+          currentMarketValue: currentMarketValue, // Return as Rands
+          currentValue: currentMarketValue, // Return as Rands
           metrics: latestMetric ? { ...latestMetric, r_ytd: rytd } : { r_ytd: rytd },
           firstInvestedDate: strategyFirstDate[matchKey] || null,
         });
@@ -4087,7 +4109,7 @@ app.get("/api/user/transactions", async (req, res) => {
       }
 
       const { data: strategies } = await db
-        .from("strategies")
+        .from("strategies_c")
         .select("name, short_name, holdings")
         .eq("status", "active");
 
@@ -6111,7 +6133,7 @@ app.post("/api/ozow/record-success", async (req, res) => {
 
     // Load strategy
     const { data: strategyData, error: stratError } = await db
-      .from("strategies")
+      .from("strategies_c")
       .select("name, holdings")
       .eq("id", strategyId)
       .maybeSingle();
@@ -6301,7 +6323,7 @@ app.post("/api/ozow/notify", async (req, res) => {
 
       // Load strategy holdings
       const { data: strategyData, error: stratError } = await db
-        .from("strategies")
+        .from("strategies_c")
         .select("name, holdings")
         .eq("id", strategyId)
         .maybeSingle();

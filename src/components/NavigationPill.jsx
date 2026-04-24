@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 
 const NavigationPill = ({ activeTab = "credit", onTabChange, className = "", theme = "dark" }) => {
@@ -9,20 +9,7 @@ const NavigationPill = ({ activeTab = "credit", onTabChange, className = "", the
     { id: "transact", label: "Transact", disabled: true },
   ];
 
-  const [showNewBadge, setShowNewBadge] = useState(false);
-
-  useEffect(() => {
-    const hasSeenFeature = localStorage.getItem("mint_seen_credit_feature");
-    if (!hasSeenFeature) {
-      setShowNewBadge(true);
-    }
-  }, []);
-
   const handleTabClick = (tabId) => {
-    if (tabId === "credit") {
-      localStorage.setItem("mint_seen_credit_feature", "true");
-      setShowNewBadge(false);
-    }
     onTabChange?.(tabId);
   };
 
@@ -54,30 +41,6 @@ const NavigationPill = ({ activeTab = "credit", onTabChange, className = "", the
 
               <span className="relative z-10">{tab.label}</span>
 
-              {!tab.disabled && tab.id === "credit" && showNewBadge && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-7 h-7 flex items-center justify-center pointer-events-none">
-                  <motion.div
-                    animate={{
-                      scale: [1, 1.12, 1],
-                      boxShadow: [
-                        "0 0 0px rgba(139, 92, 246, 0)",
-                        "0 0 16px rgba(139, 92, 246, 0.7)", 
-                        "0 0 0px rgba(139, 92, 246, 0)"
-                      ]
-                    }}
-                    transition={{
-                      duration: 1.6,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="w-6 h-6 bg-white rounded-full flex items-center justify-center border border-violet-100 shadow-sm"
-                  >
-                    <span className="text-violet-600 font-black text-[8px] leading-none tracking-tighter">
-                      NEW
-                    </span>
-                  </motion.div>
-                </div>
-              )}
             </button>
           );
         })}

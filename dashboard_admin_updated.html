@@ -310,6 +310,42 @@
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
       background-color: #ffffff !important;
     }
+    /* ═══ SACRRA Module ═══ */
+    .sacrra-root { display:flex; height:calc(100vh - 110px); font-family:'DM Sans',system-ui,sans-serif; background:#f9fafb; overflow:hidden; }
+    .sacrra-sidebar { width:220px; background:#fff; border-right:1px solid #e5e7eb; display:flex; flex-direction:column; flex-shrink:0; }
+    .sacrra-nav-btn { display:flex; align-items:center; gap:10px; width:100%; padding:9px 12px; border-radius:8px; border:none; background:none; cursor:pointer; font-size:13px; color:#555; font-weight:500; transition:all 0.12s; margin-bottom:2px; text-align:left; font-family:inherit; }
+    .sacrra-nav-btn:hover { background:#f3f4f6; }
+    .sacrra-nav-btn.active { background:#F97316; color:#fff; font-weight:600; }
+    .sacrra-nav-btn.active svg { stroke:#fff; }
+    .sacrra-main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+    .sacrra-content { flex:1; overflow:auto; padding:28px 32px; }
+    .sacrra-card { background:#fff; border-radius:10px; border:1px solid #e5e7eb; padding:20px 22px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+    .sacrra-card-title { font-size:13px; font-weight:700; color:#1a1a1a; margin-bottom:16px; text-transform:uppercase; letter-spacing:0.4px; }
+    .sacrra-stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+    .sacrra-table { width:100%; border-collapse:collapse; }
+    .sacrra-table th { text-align:left; font-size:11px; font-weight:600; color:#888; padding:8px 12px; border-bottom:1px solid #f3f4f6; text-transform:uppercase; letter-spacing:0.5px; }
+    .sacrra-table td { padding:12px; font-size:13px; color:#333; border-bottom:1px solid #f9fafb; }
+    .sacrra-btn-primary { display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:#F97316; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:background 0.15s; }
+    .sacrra-btn-primary:hover { background:#ea580c; }
+    .sacrra-btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+    .sacrra-btn-secondary { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; background:#fff; color:#555; border:1px solid #e5e7eb; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+    .sacrra-btn-secondary:hover { background:#f9fafb; }
+    .sacrra-btn-secondary:disabled { opacity:0.5; cursor:not-allowed; }
+    .sacrra-input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #e5e7eb; font-size:13px; color:#1a1a1a; outline:none; font-family:inherit; background:#fff; box-sizing:border-box; }
+    .sacrra-input:focus { border-color:#F97316; box-shadow:0 0 0 3px rgba(249,115,22,0.1); }
+    .sacrra-code-block { background:#0f172a; border-radius:8px; padding:14px 16px; font-family:monospace; font-size:11px; line-height:1.7; overflow-x:auto; }
+    @keyframes sacrra-spin { to { transform:rotate(360deg); } }
+    .sacrra-spinner { width:13px; height:13px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:sacrra-spin 0.6s linear infinite; display:inline-block; flex-shrink:0; }
+    .sacrra-spinner.dark { border-color:#e5e7eb; border-top-color:#F97316; }
+    .sacrra-badge { background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; min-width:18px; text-align:center; }
+    .sacrra-page { display:none; }
+    .sacrra-page.active { display:block; }
+    .sacrra-quick-btn { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 18px; cursor:pointer; text-align:left; transition:all 0.15s; display:flex; align-items:center; gap:14px; box-shadow:0 1px 3px rgba(0,0,0,0.04); font-family:inherit; }
+    .sacrra-quick-btn:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); background:#f9fafb; }
+    .sacrra-quick-btn.accent { border-color:rgba(249,115,22,0.2); }
+    .sacrra-quick-btn.accent:hover { background:#F97316; color:#fff; border-color:#F97316; }
+    .sacrra-resolve-btn { font-size:11px; font-weight:600; color:#F97316; background:#fff8f3; border:1px solid rgba(249,115,22,0.2); border-radius:6px; padding:4px 10px; cursor:pointer; font-family:inherit; }
+    .sacrra-resolve-btn:hover { background:#F97316; color:#fff; }
   </style>
 </head>
 
@@ -398,6 +434,9 @@
           </button>
           <button id="tabFactsheets" type="button" class="text-sm pb-2 tab-inactive hover:text-slate-800">
             Factsheets
+          </button>
+          <button id="tabSACRRA" type="button" class="text-sm pb-2 tab-inactive hover:text-slate-800">
+            SACRRA
           </button>
         </div>
 

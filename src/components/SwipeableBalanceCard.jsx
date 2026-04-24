@@ -3,6 +3,7 @@ import {
   Eye,
   EyeOff,
   TrendingUp,
+  TrendingDown,
   LayoutGrid,
   ChevronDown,
   ChevronUp,
@@ -16,7 +17,7 @@ import {
   Tooltip,
 } from "recharts";
 import { supabase } from "../lib/supabase";
-import { getStrategyPriceHistory } from "../lib/strategyData";
+import { getStrategyPriceHistory, getClientStrategyReturns } from "../lib/strategyData";
 import { useRealtimePrices } from "../lib/useRealtimePrices";
 import Skeleton from "./Skeleton";
 import SettlementBadge from "./PendingBadge";
@@ -27,9 +28,15 @@ import {
 
 const VISIBILITY_STORAGE_KEY = "mintBalanceVisible";
 
+const truncateDecimal = (num, decimals) => {
+  const factor = Math.pow(10, decimals);
+  return Math.floor(num * factor) / factor;
+};
+
 const formatFull = (value) => {
   const num = Number(value);
-  return `R${num.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const truncated = truncateDecimal(num, 2);
+  return `R${truncated.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const formatKMB = (value) => {
@@ -37,14 +44,20 @@ const formatKMB = (value) => {
   const sign = num < 0 ? "-" : "";
   const absNum = Math.abs(num);
   let formatted = absNum;
-  if (absNum >= 1e9) formatted = (absNum / 1e9).toFixed(1) + "b";
-  else if (absNum >= 1e6) formatted = (absNum / 1e6).toFixed(1) + "m";
-  else if (absNum >= 1e3) formatted = (absNum / 1e3).toFixed(1) + "k";
-  else formatted = absNum.toFixed(2);
+  if (absNum >= 1e9) formatted = (truncateDecimal(absNum / 1e9, 1)).toString() + "b";
+  else if (absNum >= 1e6) formatted = (truncateDecimal(absNum / 1e6, 1)).toString() + "m";
+  else if (absNum >= 1e3) formatted = (truncateDecimal(absNum / 1e3, 1)).toString() + "k";
+  else formatted = truncateDecimal(absNum, 2).toString();
   return `${sign}R${formatted}`;
 };
 
-const TIMEFRAME_DAYS = { d: 7, w: 30, m: 90 };
+const formatPrecise = (value) => {
+  const num = Number(value);
+  const truncated = truncateDecimal(num, 2);
+  return `R${truncated.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const TIMEFRAME_DAYS = { d: 7, "5d": 5, m: 30, ytd: 365, all: 1825 };
 
 const SwipeableBalanceCard = ({
   userId,
@@ -136,6 +149,7 @@ const SwipeableBalanceCard = ({
     };
   }, [lastUpdated]);
 
+
   useEffect(() => {
     if (!isBackFacing) setIsOpen(false);
   }, [isBackFacing]);
@@ -159,6 +173,8 @@ const SwipeableBalanceCard = ({
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
+  const [returnData5d, setReturnData5d] = useState({ pnl: 0, pct: 0 });
+  const [latestBasketValue, setLatestBasketValue] = useState(0);
   const holdingsScrollRef = useRef(null);
 
   const scrollToHoldingIndex = (index) => {
@@ -185,7 +201,16 @@ const SwipeableBalanceCard = ({
     holdingsCount: 0,
   });
 
-  const isVisible = true;
+  const [isVisible, setIsVisible] = useState(() => {
+    try { return localStorage.getItem(VISIBILITY_STORAGE_KEY) !== "false"; } catch { return true; }
+  });
+
+  const toggleVisibility = () => {
+    setIsVisible(v => {
+      try { localStorage.setItem(VISIBILITY_STORAGE_KEY, String(!v)); } catch {}
+      return !v;
+    });
+  };
 
   const loadDataRef = React.useRef(null);
 
@@ -255,9 +280,14 @@ const SwipeableBalanceCard = ({
           0,
         );
         const investedAmount = enrichedHoldings.reduce(
-          (acc, h) => acc + Number(h.invested_amount || h.market_value || 0) / 100,
+          (acc, h) => {
+            if (h.invested_amount !== undefined) return acc + Number(h.invested_amount) / 100;
+            // For stocks, use avg_fill * quantity as the initial invested amount
+            return acc + (Number(h.avg_fill || 0) * Number(h.quantity || 0)) / 100;
+          },
           0,
         );
+
 
         setDbData({
           holdings: enrichedHoldings,
@@ -303,45 +333,42 @@ const SwipeableBalanceCard = ({
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
         const startDateStr = cutoff.toISOString().split("T")[0];
+        console.log(`[SwipeableBalanceCard] Fetching history for tab: ${activeTab}, days: ${days}, startDate: ${startDateStr}`);
 
-        // Process strategies first (serial to be safe, but with try/catch)
-        const strategyPnlByDate = {};
-        const timeframeMap = { d: "1W", w: "1M", m: "3M" };
-        const tf = timeframeMap[activeTab] || "1M";
+        // Process strategies using client_strategy_returns_c table (basket_value for the period)
+        const strategyBasketByDate = {};
+        const endDateStr = new Date().toISOString().split("T")[0];
+        const limitValue = activeTab === "5d" ? 5 : undefined;
 
         const strategyHoldings = holdingsToChart.filter(h => h.isStrategy && h.strategyId);
         for (const sh of strategyHoldings) {
           try {
-            let priceHistory = await getStrategyPriceHistory(sh.strategyId, tf);
-            const pDateStr = sh.firstInvestedDate ? sh.firstInvestedDate.slice(0, 10) : null;
-            
-            if (pDateStr && priceHistory && priceHistory.length > 0) {
-              const afterP = priceHistory.filter(p => p.ts.split("T")[0] >= pDateStr);
-              if (afterP.length >= 1) priceHistory = afterP;
-              else {
-                const beforeP = priceHistory.filter(p => p.ts.split("T")[0] < pDateStr);
-                if (beforeP.length > 0) {
-                  const lastKnown = beforeP[beforeP.length - 1];
-                  priceHistory = [lastKnown, { ...lastKnown, ts: pDateStr + "T00:00:00Z" }];
-                }
-              }
+            // Build query for basket_value from client_strategy_returns_c
+            let query = supabase
+              .from("client_strategy_returns_c")
+              .select("as_of_date, basket_value")
+              .eq("user_id", userId)
+              .eq("strategy_id", sh.strategyId)
+              .gte("as_of_date", startDateStr)
+              .order("as_of_date", { ascending: true });
+
+            // For 5d, limit to 5 rows; otherwise get all rows in the range
+            if (limitValue) {
+              query = query.limit(limitValue);
             }
 
-            if (priceHistory && priceHistory.length > 0) {
-              const latestNav = priceHistory[priceHistory.length - 1].nav;
-              const currentMV = Number(sh.market_value || 0) / 100;
-              const cost = (Number(sh.avg_fill || 0) * Number(sh.quantity || 1)) / 100;
-              if (latestNav > 0) {
-                priceHistory.forEach((p) => {
-                  const dateKey = p.ts.split("T")[0];
-                  const valueAtDate = currentMV * (p.nav / latestNav);
-                  const pnl = valueAtDate - cost;
-                  strategyPnlByDate[dateKey] = (strategyPnlByDate[dateKey] || 0) + pnl;
-                });
-              }
+            const { data, error } = await query;
+
+            if (!error && data && data.length > 0) {
+              // Process rows and convert basket_value from cents to rands
+              data.forEach((row) => {
+                const dateKey = row.as_of_date;
+                const basketValueRands = (Number(row.basket_value || 0)) / 100;
+                strategyBasketByDate[dateKey] = (strategyBasketByDate[dateKey] || 0) + basketValueRands;
+              });
             }
           } catch (e) {
-            console.warn(`[Chart] Failed to fetch strategy ${sh.strategyId}:`, e);
+            console.warn(`[Chart] Failed to fetch strategy basket values for ${sh.strategyId}:`, e);
           }
         }
 
@@ -350,18 +377,18 @@ const SwipeableBalanceCard = ({
         const pricePromises = stockHoldings.map(async (h) => {
           try {
             let { data, error } = await supabase
-              .from("security_prices")
-              .select("ts, close_price")
+              .from("stock_returns_c")
+              .select("as_of_date, current_price")
               .eq("security_id", h.security_id)
-              .gte("ts", startDateStr)
-              .order("ts", { ascending: true });
+              .gte("as_of_date", startDateStr)
+              .order("as_of_date", { ascending: true });
 
             if (error || !data || data.length < 2) {
               const fallback = await supabase
-                .from("security_prices")
-                .select("ts, close_price")
+                .from("stock_returns_c")
+                .select("as_of_date, current_price")
                 .eq("security_id", h.security_id)
-                .order("ts", { ascending: false })
+                .order("as_of_date", { ascending: false })
                 .limit(30);
               if (!fallback.error && fallback.data && fallback.data.length >= 2) {
                 data = fallback.data.reverse();
@@ -373,8 +400,8 @@ const SwipeableBalanceCard = ({
             const livePrice = Number(h.last_price || 0) / 100;
             
             const allMapped = data.map((p) => ({
-              ts: p.ts.split("T")[0],
-              close: Number(p.close_price) / 100,
+              ts: p.as_of_date.split("T")[0],
+              close: Number(p.current_price) / 100,
             }));
             
             let filteredPrices = allMapped.filter((p) => p.ts >= pDateStr);
@@ -401,7 +428,7 @@ const SwipeableBalanceCard = ({
         });
 
         const allPriceData = (await Promise.all(pricePromises)).filter(Boolean);
-        const hasStrategyData = Object.keys(strategyPnlByDate).length > 0;
+        const hasStrategyData = Object.keys(strategyBasketByDate).length > 0;
 
         if (allPriceData.length === 0 && !hasStrategyData) {
           // No price history in DB — synthesize a 2-point chart from cost basis → current market value
@@ -427,7 +454,7 @@ const SwipeableBalanceCard = ({
         // Merge dates and calculate PnL per point
         const dateSet = new Set();
         allPriceData.forEach(({ prices }) => prices.forEach((p) => dateSet.add(p.ts)));
-        Object.keys(strategyPnlByDate).forEach((d) => dateSet.add(d));
+        Object.keys(strategyBasketByDate).forEach((d) => dateSet.add(d));
         const sortedDates = Array.from(dateSet).sort();
 
         const rawPriceByDate = {};
@@ -449,7 +476,8 @@ const SwipeableBalanceCard = ({
         });
 
         const points = [];
-        if (sortedDates.length > 0) {
+        // Only add anchor point if we don't have strategy basket data (which shows actual values, not P&L)
+        if (sortedDates.length > 0 && !hasStrategyData) {
           const anchorD = new Date(sortedDates[0]);
           anchorD.setDate(anchorD.getDate() - 1);
           points.push({ d: anchorD.toISOString().split("T")[0], v: 0 });
@@ -465,12 +493,14 @@ const SwipeableBalanceCard = ({
               hasVal = true;
             }
           }
-          if (strategyPnlByDate[dateKey] !== undefined) {
-            totalPnl += strategyPnlByDate[dateKey];
+          // Add strategy basket value from last 5 rows (in rands)
+          if (strategyBasketByDate[dateKey] !== undefined) {
+            totalPnl += strategyBasketByDate[dateKey];
             hasVal = true;
           }
           if (hasVal) points.push({ d: dateKey, v: Number(totalPnl.toFixed(2)) });
         }
+        console.log(`[SwipeableBalanceCard] Final chart points: ${points.length}`);
         setChartData(points);
       } catch (err) {
         console.error("❌ [SwipeableBalanceCard] Chart fetch error:", err);
@@ -482,6 +512,74 @@ const SwipeableBalanceCard = ({
     fetchChartPrices();
   }, [userId, dbData.holdings, activeTab, selectedAsset, lastUpdated, loading]);
 
+  useEffect(() => {
+    const fetchPeriodReturnData = async () => {
+      if (!["5d", "m", "ytd", "all"].includes(activeTab) || !userId) return;
+
+      try {
+        const asset = selectedAsset || (dbData.holdings.length > 0 ? dbData.holdings[0] : null);
+        if (!asset) return;
+
+        // Map activeTab to column names
+        const columnMap = {
+          "5d": { pnl: "5d_pnl", pct: "5d_pct" },
+          "m": { pnl: "1m_pnl", pct: "1m_pct" },
+          "ytd": { pnl: "ytd_pnl", pct: "ytd_pct" },
+          "all": { pnl: "inception_pnl", pct: "inception_pct" }
+        };
+
+        const columns = columnMap[activeTab];
+
+        // For strategies, fetch from client_strategy_returns_c
+        if (asset.isStrategy && asset.strategyId) {
+          const { data, error } = await supabase
+            .from("client_strategy_returns_c")
+            .select("*")
+            .eq("user_id", userId)
+            .eq("strategy_id", asset.strategyId)
+            .order("as_of_date", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (!error && data) {
+            const pnlValue = data[columns.pnl] || 0;
+            const pctValue = data[columns.pct] || 0;
+            const basketValue = (Number(data.basket_value || 0)) / 100;
+            setReturnData5d({
+              pnl: (Number(pnlValue)) / 100,
+              pct: Number(pctValue)
+            });
+            setLatestBasketValue(basketValue);
+          }
+        } else if (asset.security_id) {
+          // For stocks, fetch from stock_returns_c
+          const { data, error } = await supabase
+            .from("stock_returns_c")
+            .select("*")
+            .eq("security_id", asset.security_id)
+            .order("as_of_date", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (!error && data) {
+            const pnlValue = data[columns.pnl] || 0;
+            const pctValue = data[columns.pct] || 0;
+            const basketValue = (Number(data.basket_value || 0)) / 100;
+            setReturnData5d({
+              pnl: (Number(pnlValue)) / 100,
+              pct: Number(pctValue)
+            });
+            setLatestBasketValue(basketValue);
+          }
+        }
+      } catch (e) {
+        console.warn("[SwipeableBalanceCard] Error fetching period return data:", e);
+      }
+    };
+
+    fetchPeriodReturnData();
+  }, [activeTab, userId, selectedAsset, dbData.holdings]);
+
   const displayMarketValue = selectedAsset
     ? Number(selectedAsset.market_value || 0) / 100
     : dbData.totalMarketValue;
@@ -491,294 +589,231 @@ const SwipeableBalanceCard = ({
     100
     : dbData.totalInvested;
   const displayInvestedAmount = selectedAsset
-    ? Number(selectedAsset.invested_amount || selectedAsset.market_value || 0) / 100
+    ? (selectedAsset.invested_amount !== undefined
+        ? Number(selectedAsset.invested_amount) / 100
+        : (Number(selectedAsset.avg_fill || 0) * Number(selectedAsset.quantity || 0)) / 100)
     : dbData.totalInvestedAmount;
-  const displayReturn = displayMarketValue - displayInvested;
-  const displayBalance = displayInvestedAmount + displayReturn;
+  const displayReturn = ["5d", "m", "ytd", "all"].includes(activeTab)
+    ? returnData5d.pnl
+    : (displayMarketValue - displayInvested);
+  // Show latest basket_value for period views, otherwise use market value
+  const displayBalance = ["5d", "m", "ytd", "all"].includes(activeTab) && latestBasketValue > 0
+    ? latestBasketValue
+    : displayMarketValue;
+
   const isLoss = displayReturn < 0;
-  const returnPct =
-    displayInvested > 0
-      ? ((displayReturn / displayInvested) * 100).toFixed(1)
-      : "0.0";
-  const chartColor = isLoss ? "#FB7185" : "#10B981";
+  const returnPct = ["5d", "m", "ytd", "all"].includes(activeTab)
+    ? truncateDecimal(returnData5d.pct, 2).toFixed(2)
+    : (displayInvested > 0
+      ? truncateDecimal((displayReturn / displayInvested) * 100, 2).toFixed(2)
+      : "0.00");
+  const chartColor = isLoss ? "hsl(0,84%,60%)" : "hsl(160,70%,45%)";
 
   const masked = "••••";
 
+  const TrendIcon = isLoss ? TrendingDown : TrendingUp;
+
   if (loading && userId)
     return (
-      <div className="w-full h-full rounded-[28px] bg-slate-50 p-4 flex flex-col">
-        <div className="flex flex-1">
-          <div className="w-[50%] flex flex-col justify-between border-r border-slate-200 pr-4">
-            <div className="space-y-3">
-              <Skeleton className="h-2.5 w-20 bg-slate-200 mb-2" />
-              <Skeleton className="h-5 w-24 bg-slate-200 mb-2" />
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-4 w-16 bg-slate-200" />
-                <Skeleton className="h-4 w-10 rounded-full bg-slate-200" />
-              </div>
-            </div>
+      <div className="rounded-3xl gradient-hero-card shadow-hero p-5 relative overflow-hidden border border-white/5 animate-pulse">
+        <div className="flex items-center justify-between mb-3">
+          <Skeleton className="h-2.5 w-28 bg-white/10 rounded" />
+          <Skeleton className="h-3 w-10 bg-white/10 rounded" />
+        </div>
+        <div className="flex items-end justify-between mb-4">
+          <div>
+            <Skeleton className="h-8 w-36 bg-white/10 rounded mb-2" />
+            <Skeleton className="h-5 w-24 bg-white/10 rounded" />
           </div>
-          <div className="w-[50%] flex flex-col justify-between pl-4">
-            <div className="flex gap-1.5">
-              <Skeleton className="h-5 w-8 rounded-full bg-slate-200" />
-              <Skeleton className="h-5 w-8 rounded-full bg-slate-200" />
-              <Skeleton className="h-5 w-8 rounded-full bg-slate-200" />
-            </div>
-            <div className="flex-1 flex items-end gap-1 py-3">
-              {[40, 55, 35, 65, 50, 70, 45, 60, 75, 55].map((h, i) => (
-                <Skeleton
-                  key={i}
-                  className="flex-1 rounded-sm bg-slate-200"
-                  style={{ height: `${h}%` }}
-                />
-              ))}
-            </div>
-          </div>
+          <Skeleton className="h-12 w-28 bg-white/10 rounded" />
+        </div>
+        <Skeleton className="h-9 w-full bg-white/10 rounded-full mb-4" />
+        <div className="flex gap-4 pt-4 border-t border-white/10">
+          <Skeleton className="h-8 w-24 bg-white/10 rounded" />
+          <Skeleton className="h-8 w-24 bg-white/10 rounded" />
         </div>
       </div>
     );
 
-  const getUpdatedAgoText = () => {
-    if (!lastUpdated) return "";
-    const seconds = Math.round((Date.now() - lastUpdated) / 1000);
-    if (seconds < 5) return "Updated just now";
-    if (seconds < 60) return `Updated ${seconds}s ago`;
-    return `Updated ${Math.round(seconds / 60)}m ago`;
-  };
-
   return (
-    <div className="relative w-full z-10 rounded-[26px] overflow-hidden">
-      {isConnected && (
-        <div className="absolute top-2 right-3 z-20 flex items-center gap-1.5">
-          {showUpdatedText && (
-            <span
-              className="text-[8px] text-slate-500 font-medium transition-opacity duration-500"
-              style={{ animation: "fadeInOut 3s ease-in-out" }}
-            >
-              {getUpdatedAgoText()}
-            </span>
-          )}
-          <span
-            className="block w-1.5 h-1.5 rounded-full bg-emerald-400"
-            style={{ animation: "pulse-dot 2s ease-in-out infinite" }}
-          />
-          <style>{`
-            @keyframes pulse-dot {
-              0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4); }
-              50% { opacity: 0.7; box-shadow: 0 0 0 3px rgba(52, 211, 153, 0); }
-            }
-            @keyframes fadeInOut {
-              0% { opacity: 0; }
-              10% { opacity: 1; }
-              80% { opacity: 1; }
-              100% { opacity: 0; }
-            }
-          `}</style>
-        </div>
-      )}
-      <div className="absolute inset-0 rounded-[26px] bg-[radial-gradient(circle_at_78%_18%,rgba(88,62,186,0.45),rgba(8,8,48,0.95)_46%,rgba(5,5,33,0.98)_100%)]" />
-      <div className="relative z-10 flex flex-col p-4 text-slate-100">
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-medium">
-            {selectedAsset ? selectedAsset.symbol : "portfolio value"}
-          </p>
-          <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/15 shrink-0">
-            {["d", "w", "m"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1 text-[10px] font-semibold rounded-md ${activeTab === tab ? "bg-white/10 text-white shadow-sm" : "text-slate-300"}`}
-              >
-                {tab.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
+    <div className="rounded-3xl gradient-hero-card shadow-hero p-5 relative overflow-hidden border border-white/5">
+      {/* Ambient glows */}
+      <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-accent/30 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-12 -left-8 w-32 h-32 rounded-full bg-primary/15 blur-3xl pointer-events-none" />
 
-        <p className="text-[36px] leading-none font-bold text-white mb-3 w-full overflow-visible whitespace-nowrap">
-          {isVisible ? (selectedAsset ? formatKMB(displayBalance) : formatFull(displayBalance)) : masked}
-        </p>
-
-        <div className="mb-2 flex items-center gap-2 flex-wrap">
-          <span className={`px-2 py-0.5 rounded-xl border text-sm font-semibold shrink-0 ${isLoss ? "border-rose-700/70 bg-rose-600/15 text-rose-300" : "border-emerald-700/70 bg-emerald-600/15 text-emerald-300"}`}>
-            {isLoss ? "▼" : "▲"} {isVisible ? formatKMB(Math.abs(displayReturn)) : masked}
+      {/* Top row: label + visibility + LIVE */}
+      <div className="flex items-center justify-between relative">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold tracking-[0.18em] text-white/60">
+            {selectedAsset ? selectedAsset.symbol.toUpperCase() : "PORTFOLIO VALUE"}
           </span>
-          <span className={`text-[12px] font-medium shrink-0 ${isLoss ? "text-rose-300/80" : "text-emerald-300/80"}`}>
-            {isVisible ? `${isLoss ? "-" : "+"}${returnPct}% all time` : masked}
-          </span>
-        </div>
-
-        <div ref={dropdownRef} className="relative mb-2 self-end">
           <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/15 min-w-[180px]"
+            onClick={toggleVisibility}
+            className="text-white/50 hover:text-white/90 transition-colors"
+            aria-label="Toggle visibility"
           >
-            <div className="flex items-center gap-2">
-              <LayoutGrid size={12} className="text-violet-400" />
-              <span className="text-[12px] leading-none font-medium text-slate-200 whitespace-nowrap">
-                {selectedAsset ? selectedAsset.symbol : "All Investments"}
-              </span>
-            </div>
-            {isOpen ? (
-              <ChevronUp size={14} className="text-slate-300" />
-            ) : (
-              <ChevronDown size={14} className="text-slate-300" />
-            )}
+            {isVisible ? <Eye size={12} /> : <EyeOff size={12} />}
           </button>
-          {isOpen && (
-            <div className="absolute bottom-full mb-1 right-0 w-full bg-white rounded-xl z-[120] overflow-hidden border border-slate-200 shadow-lg">
-              <div className="py-1 overflow-y-auto max-h-[140px]">
-                <button
-                  onClick={() => {
-                    setSelectedAsset(null);
-                    setIsOpen(false);
-                    scrollToHoldingIndex(-1);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left ${!selectedAsset ? "bg-slate-100" : "hover:bg-slate-50"}`}
-                >
-                  <LayoutGrid size={10} className="text-violet-400 shrink-0" />
-                  <span className="text-[9px] font-medium text-slate-700 truncate">
-                    All Investments
-                  </span>
-                </button>
-                {dbData.holdings.map((item, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setSelectedAsset(item);
-                      setIsOpen(false);
-                      scrollToHoldingIndex(idx);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-left ${selectedAsset?.symbol === item.symbol ? "bg-slate-100" : "hover:bg-slate-50"}`}
-                  >
-                    <div className="w-4 h-4 rounded-full overflow-hidden bg-slate-100 shrink-0">
-                      {item.isStrategy && item.topLogos?.length > 0 ? (
-                        <div className="flex -space-x-1 h-full items-center justify-center">
-                          {item.topLogos.slice(0, 2).map((logo, li) => (
-                            <img
-                              key={li}
-                              src={logo}
-                              className="w-3 h-3 rounded-full object-cover border border-white/25"
-                            />
-                          ))}
-                        </div>
-                      ) : item.logo_url ? (
-                        <img
-                          src={item.logo_url}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="flex items-center justify-center w-full h-full text-[6px] text-slate-500">
-                          {item.symbol?.substring(0, 2)}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[9px] font-medium text-slate-700 truncate">
-                      {item.symbol}
-                    </span>
-                    {(() => {
-                      if (item.isStrategy && Number(item.avg_fill || 0) === 0) {
-                        return <SettlementBadge status="pending" size="xs" />;
-                      }
-                      if (item.settlement_status && item.settlement_status !== "confirmed") {
-                        return <SettlementBadge status={item.settlement_status} size="xs" />;
-                      }
-                      const isSettlementActive = settlementCfg.brokerEnabled || settlementCfg.fullyIntegrated;
-                      if (!isSettlementActive) return null;
-                      const s = holdingSettlementStatus;
-                      return s && s !== "confirmed" ? (
-                        <SettlementBadge status={s} size="xs" />
-                      ) : null;
-                    })()}
-                  </button>
-                ))}
-              </div>
-            </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {isConnected && (
+            <>
+              <div className="w-1.5 h-1.5 rounded-full bg-success" style={{ animation: "pulse-dot 2s ease-in-out infinite" }} />
+              <span className="text-[9px] tracking-wider text-white/50 font-semibold">LIVE</span>
+            </>
           )}
         </div>
+      </div>
 
-        <div className="mb-3 w-full overflow-hidden" style={{ minHeight: 100, height: 100 }}>
-              {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={100}>
-                  <ComposedChart
-                    data={chartData}
-                    margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
-                  >
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        return (
-                          <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg px-2 py-1 shadow-md">
-                            <p className="text-[9px] text-slate-500">{payload[0]?.payload?.d}</p>
-                            <p className="text-[10px] font-semibold text-slate-800">
-                              {formatKMB(payload[0]?.value)}
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <ReferenceLine
-                      y={0}
-                      stroke="rgba(148,163,184,0.5)"
-                      strokeDasharray="3 3"
-                      strokeWidth={1}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="v"
-                      stroke="none"
-                      fill={chartColor}
-                      fillOpacity={0.1}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="v"
-                      stroke={chartColor}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  {chartLoading ? (
-                    <div className="flex items-end gap-1 w-full h-full py-2">
-                      {[40, 55, 35, 65, 50, 70, 45, 60, 75, 55, 65, 50].map(
-                        (h, i) => (
-                          <Skeleton
-                            key={i}
-                            className="flex-1 rounded-sm bg-white/10"
-                            style={{ height: `${h}%` }}
-                          />
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-[9px] text-slate-500">No chart data</p>
+      {/* Value + inline sparkline */}
+      <div className="flex items-end justify-between mt-2 relative">
+        <div className="flex-1 min-w-0 pr-3">
+          <h2 className="text-3xl font-bold tracking-tight text-white leading-none">
+            {isVisible ? formatFull(displayBalance) : masked}
+          </h2>
+          <div className="flex items-center gap-2 mt-2">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${isLoss ? "bg-destructive/20 text-destructive" : "bg-success/20 text-success"}`}>
+              <TrendIcon size={11} strokeWidth={2.5} />
+              {isVisible ? (
+                <>
+                  {["5d", "m", "ytd", "all"].includes(activeTab) && (
+                    <span className="text-[10px] opacity-75">
+                      {activeTab === "5d" && "5D:"}{activeTab === "m" && "1M:"}{activeTab === "ytd" && "YTD:"}{activeTab === "all" && "Inc:"}
+                    </span>
                   )}
-                </div>
+                  {formatKMB(Math.abs(displayReturn))}
+                </>
+              ) : (
+                masked
               )}
-            </div>
-        <div className="mt-auto pt-3 pb-5 border-t border-white/10 flex items-start">
-          <div className="flex-1 min-w-0 pr-3">
-            <p className="text-[8px] uppercase tracking-[0.2em] text-slate-400 font-medium mb-0.5">
-              ACCOUNT BALANCE
-            </p>
-            <p className="text-[11px] font-semibold text-slate-100 truncate">
-              {isVisible ? (walletLoading ? "Loading..." : formatFull(walletBalance)) : masked}
-            </p>
+            </span>
+            <span className={`text-[11px] font-medium ${isLoss ? "text-destructive" : "text-success"}`}>
+              {isVisible ? `${isLoss ? "-" : "+"}${returnPct}%` : masked}
+            </span>
           </div>
-          <div className="w-px self-stretch bg-white/10" />
-          <div className="flex-1 min-w-0 pl-3">
-            <p className="text-[8px] uppercase tracking-[0.2em] text-slate-400 font-medium mb-0.5" style={{ fontFamily: "'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif" }}>
-              MINT NUMBER
-            </p>
-            <p className="text-[11px] tracking-[0.1em] text-slate-300 font-mono font-bold truncate">
-              {mintNumber ?? "GENERATING..."}
-            </p>
+        </div>
+
+        {/* Inline sparkline */}
+        <div className="opacity-90 shrink-0">
+          {chartData.length > 1 ? (
+            <ResponsiveContainer width={110} height={48}>
+              <ComposedChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg px-2 py-1 shadow-md">
+                        <p className="text-[9px] text-slate-500">{payload[0]?.payload?.d}</p>
+                        <p className="text-[10px] font-semibold text-slate-800">{formatPrecise(payload[0]?.value)}</p>
+                      </div>
+                    );
+                  }}
+                />
+                <ReferenceLine y={0} stroke="rgba(148,163,184,0.3)" strokeDasharray="3 3" strokeWidth={1} />
+                <Area type="monotone" dataKey="v" stroke="none" fill={chartColor} fillOpacity={0.15} />
+                <Line type="monotone" dataKey="v" stroke={chartColor} strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : chartLoading ? (
+            <div className="flex items-end gap-0.5 w-[110px] h-12">
+              {[40, 55, 35, 65, 50, 70, 45, 60].map((h, i) => (
+                <Skeleton key={i} className="flex-1 rounded-sm bg-white/10" style={{ height: `${h}%` }} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Asset selector */}
+      <div ref={dropdownRef} className="relative mt-3">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/15"
+        >
+          <LayoutGrid size={12} className="text-violet-400" />
+          <span className="text-[11px] font-medium text-slate-200 whitespace-nowrap">
+            {selectedAsset ? selectedAsset.symbol : (dbData.holdings.length > 0 ? dbData.holdings[0].symbol : "Investments")}
+          </span>
+          {isOpen ? <ChevronUp size={12} className="text-slate-300" /> : <ChevronDown size={12} className="text-slate-300" />}
+        </button>
+        {isOpen && (
+          <div className="absolute top-full mt-1 left-0 w-48 bg-white rounded-xl z-[120] overflow-hidden border border-slate-200 shadow-lg">
+            <div className="py-1 overflow-y-auto max-h-[140px]">
+              {dbData.holdings.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => { setSelectedAsset(item); setIsOpen(false); scrollToHoldingIndex(idx); }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left ${selectedAsset?.symbol === item.symbol ? "bg-slate-100" : "hover:bg-slate-50"}`}
+                >
+                  <div className="w-4 h-4 rounded-full overflow-hidden bg-slate-100 shrink-0">
+                    {item.isStrategy && item.topLogos?.length > 0 ? (
+                      <div className="flex -space-x-1 h-full items-center justify-center">
+                        {item.topLogos.slice(0, 2).map((logo, li) => (
+                          <img key={li} src={logo} className="w-3 h-3 rounded-full object-cover border border-white/25" />
+                        ))}
+                      </div>
+                    ) : item.logo_url ? (
+                      <img src={item.logo_url} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="flex items-center justify-center w-full h-full text-[6px] text-slate-500">
+                        {item.symbol?.substring(0, 2)}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[9px] font-medium text-slate-700 truncate">{item.symbol}</span>
+                  {(() => {
+                    if (item.isStrategy && Number(item.avg_fill || 0) === 0) return <SettlementBadge status="pending" size="xs" />;
+                    if (item.settlement_status && item.settlement_status !== "confirmed") return <SettlementBadge status={item.settlement_status} size="xs" />;
+                    const isSettlementActive = settlementCfg.brokerEnabled || settlementCfg.fullyIntegrated;
+                    if (!isSettlementActive) return null;
+                    const s = holdingSettlementStatus;
+                    return s && s !== "confirmed" ? <SettlementBadge status={s} size="xs" /> : null;
+                  })()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Period selector */}
+      <div className="mt-4 flex bg-black/20 backdrop-blur-sm rounded-full p-0.5 relative">
+        {[["5d","5D"],["m","M"],["ytd","YTD"],["all","All"]].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+              activeTab === key ? "bg-white text-slate-900 shadow-sm" : "text-white/60 hover:text-white/90"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-4 pt-4 border-t border-white/10 flex relative">
+        <div className="flex-1">
+          <div className="text-[9px] tracking-[0.15em] text-white/50 font-semibold">CASH</div>
+          <div className="text-sm font-bold text-white mt-0.5">
+            {isVisible ? (walletLoading ? "..." : formatFull(walletBalance)) : masked}
+          </div>
+        </div>
+        <div className="w-px bg-white/10" />
+        <div className="flex-1 pl-4">
+          <div className="text-[9px] tracking-[0.15em] text-white/50 font-semibold">MINT NUMBER</div>
+          <div className="text-sm font-bold text-white mt-0.5 font-mono">
+            {mintNumber ?? "GENERATING..."}
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52,211,153,0.4); }
+          50% { opacity: 0.7; box-shadow: 0 0 0 3px rgba(52,211,153,0); }
+        }
+      `}</style>
     </div>
   );
 };

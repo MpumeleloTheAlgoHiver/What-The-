@@ -11,7 +11,11 @@ const MINT_FAINT    = [237, 233, 254];     // #EDE9FE
 const DARK_INK      = [30, 27, 75];        // near-black navy
 const BODY_TEXT     = [55, 48, 90];        // body prose
 const LABEL_TEXT    = [130, 100, 170];     // soft purple labels
-const BORDER_CLR    = [220, 212, 245];
+const BORDER_CLR    = [226, 232, 240];     // Slate-200
+const ROW_BG        = [255, 255, 255];     // White
+const HEADER_BG     = [248, 250, 252];     // Slate-50
+const LABEL_CLR     = [100, 116, 139];     // Slate-500
+const VALUE_CLR     = [30, 41, 59];        // Slate-800
 const WHITE         = [255, 255, 255];
 
 const MINT_LOGO_URL =
@@ -64,29 +68,26 @@ function drawRow(doc, y, label, value, evenRow = false) {
   const valLines = doc.splitTextToSize(String(value || "—"), COL2 - px * 2);
   const rowH = Math.max(valLines.length * lh + py * 2, 10);
 
-  // label cell
+  // Single clean white rectangle for the whole row
   doc.setDrawColor(...BORDER_CLR);
-  doc.setLineWidth(0.2);
-  doc.setFillColor(...(evenRow ? [243, 240, 255] : MINT_FAINT));
-  doc.rect(MARGIN, y, COL1, rowH, "FD");
-  // value cell
-  doc.setFillColor(...(evenRow ? WHITE : [250, 249, 255]));
-  doc.rect(MARGIN + COL1, y, COL2, rowH, "FD");
+  doc.setLineWidth(0.15);
+  doc.setFillColor(...ROW_BG);
+  doc.rect(MARGIN, y, COL1 + COL2, rowH, "FD");
 
-  // left accent strip on label
-  doc.setFillColor(...MINT_LIGHT);
-  doc.rect(MARGIN, y, 1.5, rowH, "F");
+  // Subtle separator between label and value
+  doc.setDrawColor(...BORDER_CLR);
+  doc.line(MARGIN + COL1, y, MARGIN + COL1, y + rowH);
 
-  // label text
+  // label text (left side)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.setTextColor(...LABEL_TEXT);
+  doc.setTextColor(...LABEL_CLR);
   doc.text(label.toUpperCase(), MARGIN + 4, y + py + 3.5);
 
-  // value text
+  // value text (right side)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...DARK_INK);
+  doc.setFontSize(8.5);
+  doc.setTextColor(...VALUE_CLR);
   valLines.forEach((l, i) => doc.text(l, MARGIN + COL1 + px, y + py + 3.5 + i * lh));
   return y + rowH;
 }
@@ -94,12 +95,15 @@ function drawRow(doc, y, label, value, evenRow = false) {
 // ─── Section heading pill ─────────────────────────────────────────────────────
 function drawSectionHeading(doc, y, title) {
   const pillH = 7.5;
-  doc.setFillColor(...MINT_PURPLE);
-  doc.roundedRect(MARGIN, y, PAGE_W - MARGIN * 2, pillH, 2, 2, "F");
+  // Light grey background with border instead of solid purple
+  doc.setDrawColor(...BORDER_CLR);
+  doc.setFillColor(...HEADER_BG);
+  doc.roundedRect(MARGIN, y, PAGE_W - MARGIN * 2, pillH, 1.2, 1.2, "FD");
+  
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...WHITE);
-  doc.text(title, MARGIN + 4, y + 5);
+  doc.setFontSize(7.5);
+  doc.setTextColor(...LABEL_CLR);
+  doc.text(title.toUpperCase(), MARGIN + 4, y + 5);
   return y + pillH + 2;
 }
 

@@ -49,7 +49,7 @@ export function setupRealtimePrices() {
       {
         event: "UPDATE",
         schema: "public",
-        table: "securities",
+        table: "securities_c",
       },
       (payload) => {
         const changed = payload.new;
@@ -70,7 +70,7 @@ export function setupRealtimePrices() {
       {
         event: "INSERT",
         schema: "public",
-        table: "security_prices",
+        table: "stock_returns_c",
       },
       (payload) => {
         console.log("[realtime-prices] New price record inserted for security:", payload.new?.security_id);

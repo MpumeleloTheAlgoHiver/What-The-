@@ -74,7 +74,7 @@ export default async function handler(req, res) {
       }
 
       const { data: strategies } = await db
-        .from("strategies")
+        .from("strategies_c")
         .select("name, short_name, holdings")
         .eq("status", "active");
 
