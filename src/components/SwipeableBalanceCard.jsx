@@ -28,9 +28,15 @@ import {
 
 const VISIBILITY_STORAGE_KEY = "mintBalanceVisible";
 
+const truncateDecimal = (num, decimals) => {
+  const factor = Math.pow(10, decimals);
+  return Math.floor(num * factor) / factor;
+};
+
 const formatFull = (value) => {
   const num = Number(value);
-  return `R${num.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const truncated = truncateDecimal(num, 2);
+  return `R${truncated.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const formatKMB = (value) => {
@@ -38,10 +44,10 @@ const formatKMB = (value) => {
   const sign = num < 0 ? "-" : "";
   const absNum = Math.abs(num);
   let formatted = absNum;
-  if (absNum >= 1e9) formatted = (absNum / 1e9).toFixed(1) + "b";
-  else if (absNum >= 1e6) formatted = (absNum / 1e6).toFixed(1) + "m";
-  else if (absNum >= 1e3) formatted = (absNum / 1e3).toFixed(1) + "k";
-  else formatted = absNum.toFixed(2);
+  if (absNum >= 1e9) formatted = (truncateDecimal(absNum / 1e9, 1)).toString() + "b";
+  else if (absNum >= 1e6) formatted = (truncateDecimal(absNum / 1e6, 1)).toString() + "m";
+  else if (absNum >= 1e3) formatted = (truncateDecimal(absNum / 1e3, 1)).toString() + "k";
+  else formatted = truncateDecimal(absNum, 2).toString();
   return `${sign}R${formatted}`;
 };
 
@@ -558,10 +564,10 @@ const SwipeableBalanceCard = ({
 
   const isLoss = displayReturn < 0;
   const returnPct = activeTab === "5d"
-    ? returnData5d.pct.toFixed(1)
+    ? truncateDecimal(returnData5d.pct, 2).toFixed(2)
     : (displayInvested > 0
-      ? ((displayReturn / displayInvested) * 100).toFixed(1)
-      : "0.0");
+      ? truncateDecimal((displayReturn / displayInvested) * 100, 2).toFixed(2)
+      : "0.00");
   const chartColor = isLoss ? "hsl(0,84%,60%)" : "hsl(160,70%,45%)";
 
   const masked = "••••";
