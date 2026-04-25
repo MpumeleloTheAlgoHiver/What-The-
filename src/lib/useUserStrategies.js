@@ -247,11 +247,11 @@ function formatChartData(priceHistory, timeFilter) {
     case "W":
     case "5d": {
       return priceHistory.map((p) => {
-        const { day, month, dayOfWeek } = parseDateParts(p.ts);
+        const { day, month, dayOfWeek, year } = parseDateParts(p.ts);
         return {
-          day: DAY_NAMES[dayOfWeek] + ' ' + day,
+          day: `${day} ${MONTH_NAMES_SHORT[month - 1]} '${String(year).slice(-2)}`,
           value: p.nav,
-          fullDate: `${DAY_NAMES[dayOfWeek]}, ${day} ${MONTH_NAMES_SHORT[month - 1]}`,
+          fullDate: `${DAY_NAMES[dayOfWeek]}, ${day} ${MONTH_NAMES_SHORT[month - 1]} ${year}`,
         };
       });
     }
@@ -260,7 +260,7 @@ function formatChartData(priceHistory, timeFilter) {
       return priceHistory.map((p) => {
         const { year, day, month } = parseDateParts(p.ts);
         return {
-          day: day + ' ' + MONTH_NAMES_SHORT[month - 1],
+          day: `${day} ${MONTH_NAMES_SHORT[month - 1]} '${String(year).slice(-2)}`,
           value: p.nav,
           fullDate: `${day} ${MONTH_NAMES_SHORT[month - 1]} ${year}`,
         };
