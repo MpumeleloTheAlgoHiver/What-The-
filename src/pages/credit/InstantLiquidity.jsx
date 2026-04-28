@@ -20,7 +20,7 @@ import RepayLiquidity from "./RepayLiquidity";
 import NewPortfolio from "../NewPortfolioPage.jsx";
 
 // --- LIB ---
-import { LendingEngine } from "../../lib/LendingEngine";
+import { calculateSecuredLoan, SECURED_MONTHLY_RATE } from "./securedLoanCalc";
 
 // --- CONSTANTS ---
 const sortOptions = ["Balance (High)", "Score (High)", "Market Cap", "Dividend Yield"];
@@ -33,8 +33,8 @@ const normalizeLoanType = (value, fallback = "secured") => {
 
 // --- MINI CHART COMPONENT ---
 const AssetMiniChart = ({ data, color = "#7c3aed" }) => (
-  <div className="h-8 w-16">
-    <ResponsiveContainer width="100%" height="100%" minHeight={32}>
+  <div className="h-8 w-16" style={{ minWidth: 64, minHeight: 32 }}>
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={32}>
       <LineChart data={data.map((v, i) => ({ v, i }))}>
         <YAxis hide domain={['dataMin', 'dataMax']} />
         <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
@@ -254,22 +254,25 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
   };
 
   const handleConfirmPledge = async () => {
+    if (isProcessing) return;
+    const principal = parseFloat(pledgeAmount);
+    if (!principal || isNaN(principal) || principal <= 0) {
+      alert("Please enter a valid pledge amount greater than R0.");
+      return;
+    }
     setIsProcessing(true);
     try {
-      const principal = parseFloat(pledgeAmount);
-      const engine = new LendingEngine({
-        loanType: 'securitised',
-        principal: principal,
+      const calculation = calculateSecuredLoan({
+        principal,
         originationDate: new Date(),
-        nextSalaryDate: nextSalaryDate,
-        termMonths: termMonths
+        nextSalaryDate,
+        termMonths,
       });
-      const calculation = engine.calculateLoan();
 
       const { data: loan, error: loanErr } = await supabase.from('loan_application').insert({
         user_id: profile.id,
         principal_amount: principal,
-        interest_rate: engine.getMonthlyRate(),
+        interest_rate: SECURED_MONTHLY_RATE,
         amount_repayable: calculation.totalRepayable,
         number_of_months: termMonths,
         first_repayment_date: calculation.paymentDates[0].toISOString(),
@@ -821,8 +824,7 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
 
               {/* Quote Logic Summary */}
               {(() => {
-                const engine = new LendingEngine({ loanType: 'securitised', principal: pledgeAmount || 0, originationDate: new Date(), nextSalaryDate: nextSalaryDate, termMonths: termMonths });
-                const calc = engine.calculateLoan();
+                const calc = calculateSecuredLoan({ principal: pledgeAmount || 0, originationDate: new Date(), nextSalaryDate, termMonths });
                 return (
                   <div className="bg-slate-900 rounded-2xl p-5 text-white">
                     <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">

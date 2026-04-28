@@ -333,10 +333,21 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
               const totalRepayable = Number(selectedLoan.amount_repayable || 0);
               const months = Number(selectedLoan.number_of_months || 1);
               const monthlyDue = totalRepayable > 0 ? totalRepayable / months : 0;
-              const interestRate = Number(selectedLoan.interest_rate || 0);
-              const annualRate = (interestRate * 12 * 100);
-              const amountPaid = Math.max(0, totalRepayable - principal);
+
+              // Secured credit uses SA Prime rate
+              const PRIME_RATE = 10.50;
+
+              // Estimate the original principal from amount_repayable to compute real progress
+              // Original insert: amount_repayable = principal + interest + initiation + service_fees
+              // interest ≈ principal * (prime/12/100) * months, initiation ≈ capped at R1050, service = R69 * months
+              const estServiceFees = 69 * months;
+              const estInitiation = 1050; // capped for most real loans
+              const monthlyRate = PRIME_RATE / 12 / 100;
+              const estOriginalPrincipal = Math.max(0, (totalRepayable - estInitiation - estServiceFees) / (1 + monthlyRate * months));
+              // Amount actually paid = how much principal has been reduced from its original value
+              const amountPaid = Math.max(0, estOriginalPrincipal - principal);
               const progressPct = totalRepayable > 0 ? Math.min(100, (amountPaid / totalRepayable) * 100) : 0;
+
               const nextDate = selectedLoan.first_repayment_date
                 ? new Date(selectedLoan.first_repayment_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
                 : 'TBD';
@@ -378,7 +389,7 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
                         className="h-full rounded-full transition-all duration-700"
                         style={{
                           width: `${progressPct}%`,
-                          background: progressPct >= 75 ? '#10b981' : progressPct >= 40 ? '#6d28d9' : '#6d28d9'
+                          background: progressPct >= 75 ? '#10b981' : '#6d28d9'
                         }}
                       />
                     </div>
@@ -396,7 +407,7 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Interest Rate</span>
-                      <span className="text-xs font-bold text-slate-900">{annualRate > 0 ? `${annualRate.toFixed(2)}% p.a.` : '—'}</span>
+                      <span className="text-xs font-bold text-slate-900">Prime ({PRIME_RATE.toFixed(2)}% p.a.)</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Next Payment</span>
