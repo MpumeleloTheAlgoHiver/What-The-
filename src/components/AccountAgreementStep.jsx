@@ -39,14 +39,12 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import SignaturePad from "signature_pad";
 import jsPDF from "jspdf";
 import { supabase } from "../lib/supabase";
+import { downloadPdfBuffer } from "../lib/pdfDownload";
 
 // ─── Image cache (module-level) ────────────────────────────────────────────
 const imageCache = new Map();
 
 // ─── constants ────────────────────────────────────────────────────────────────
-
-const MINT_LOGO_URL =
-  "https://mfxnghmuccevsxwcetej.supabase.co/storage/v1/object/public/Mint%20Assets/tMOmeIOo4KE20Yh1bIuk8PFMlFHZ421rVESa2dcn.jpg";
 
 const CEO_SIGNATURE_URL = "/assets/ceo-signature.png";
 
@@ -173,7 +171,6 @@ function drawFooters(doc, signedAt, downloadedAt) {
 
 async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl, signedAt, downloadedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const logoB64 = await fetchImageBase64(MINT_LOGO_URL);
   const ceoSigB64 = await fetchImageBase64(CEO_SIGNATURE_URL);
 
   const {
@@ -210,13 +207,6 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   // ── PAGE 1: Account Details ───────────────────────────────────────────────
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, PAGE_W, PAGE_H, "F");
-
-  if (logoB64?.data) {
-    const logoAspect = logoB64.width / logoB64.height;
-    const logoH = 14;
-    const logoW = logoH * logoAspect;
-    doc.addImage(logoB64.data, "JPEG", PAGE_W - MARGIN - logoW, MARGIN, logoW, logoH, undefined, "FAST");
-  }
 
   let y = MARGIN + 20;
 
@@ -258,13 +248,6 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   doc.addPage();
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, PAGE_W, PAGE_H, "F");
-
-  if (logoB64?.data) {
-    const logoAspect = logoB64.width / logoB64.height;
-    const logoH = 13;
-    const logoW = logoH * logoAspect;
-    doc.addImage(logoB64.data, "JPEG", PAGE_W - MARGIN - logoW, MARGIN, logoW, logoH, undefined, "FAST");
-  }
 
   y = MARGIN + 20;
 
@@ -790,13 +773,7 @@ export default function AccountAgreementStep({
       signedAt, downloadedAt: dlNow,
     });
 
-    const blob = new Blob([pdfBuffer], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mint-agreement-${new Date(dlNow).toISOString().slice(0, 10)}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadPdfBuffer(pdfBuffer, `mint-agreement-${new Date(dlNow).toISOString().slice(0, 10)}.pdf`);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();

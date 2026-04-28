@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import SignaturePad from "signature_pad";
 import jsPDF from "jspdf";
 import { X, Check, Loader2 } from "lucide-react";
+import { downloadPdfBuffer } from "../lib/pdfDownload";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const MINT_LOGO_URL = "https://mfxnghmuccevsxwcetej.supabase.co/storage/v1/object/public/Mint%20Assets/tMOmeIOo4KE20Yh1bIuk8PFMlFHZ421rVESa2dcn.jpg";
 const CEO_SIGNATURE_URL = "/assets/ceo-signature.png";
 const MINT_PURPLE = [91, 33, 182];
 const PAGE_W = 210;
@@ -73,12 +73,7 @@ function drawRow(doc, y, label, value, labelW, valueW, margin) {
   return y + rowH;
 }
 
-function addPageHeader(doc, logoB64, pageNum, totalPages) {
-  if (logoB64?.data) {
-    const aspect = logoB64.width / logoB64.height;
-    const h = 10, w = h * aspect;
-    doc.addImage(logoB64.data, "JPEG", PAGE_W - MARGIN - w, MARGIN - 2, w, h, undefined, "FAST");
-  }
+function addPageHeader(doc, pageNum, totalPages) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(160, 160, 160);
@@ -90,10 +85,7 @@ function addPageHeader(doc, logoB64, pageNum, totalPages) {
 
 async function buildChildAgreementPdf({ parentProfile, childData, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [logoB64, ceoSigB64] = await Promise.all([
-    fetchImageBase64(MINT_LOGO_URL),
-    fetchImageBase64(CEO_SIGNATURE_URL),
-  ]);
+  const ceoSigB64 = await fetchImageBase64(CEO_SIGNATURE_URL);
 
   const parentName = [parentProfile?.firstName, parentProfile?.lastName].filter(Boolean).join(" ") || "—";
   const parentId = parentProfile?.idNumber || "—";
@@ -115,7 +107,7 @@ async function buildChildAgreementPdf({ parentProfile, childData, signatureDataU
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, PAGE_W, PAGE_H, "F");
 
-  addPageHeader(doc, logoB64, pageNum, 2);
+  addPageHeader(doc, pageNum, 2);
 
   // Purple header bar
   doc.setFillColor(...MINT_PURPLE);
@@ -177,7 +169,7 @@ async function buildChildAgreementPdf({ parentProfile, childData, signatureDataU
       if (y > PAGE_H - MARGIN - 12) {
         doc.addPage();
         pageNum++;
-        addPageHeader(doc, logoB64, pageNum, 2);
+        addPageHeader(doc, pageNum, 2);
         y = MARGIN + 14;
       }
       doc.text(line, MARGIN + indent, y);
@@ -257,7 +249,7 @@ async function buildChildAgreementPdf({ parentProfile, childData, signatureDataU
   if (y > PAGE_H - 110) {
     doc.addPage();
     pageNum++;
-    addPageHeader(doc, logoB64, pageNum, 2);
+    addPageHeader(doc, pageNum, 2);
     y = MARGIN + 14;
   }
 
@@ -405,23 +397,11 @@ export default function ChildResponsibilityAgreement({
         signedAt: now,
       });
 
-      // Trigger download immediately after signing
-      try {
-        const blob = new Blob([pdfBuffer], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        const childName = `${childData?.first_name || ""}_${childData?.last_name || ""}`.trim().replace(/\s+/g, "_") || "child";
-        a.download = `Mint_Agreement_${childName}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } catch {
-        // Download failing shouldn't block the save flow
-      }
+      const saved = await onComplete({ pdfBuffer, signedAt: now, signatureDataUrl: sigUrl });
+      if (saved === false) return;
 
-      await onComplete({ pdfBuffer, signedAt: now, signatureDataUrl: sigUrl });
+      const childName = `${childData?.first_name || ""}_${childData?.last_name || ""}`.trim().replace(/\s+/g, "_") || "child";
+      downloadPdfBuffer(pdfBuffer, `Mint_Agreement_${childName}.pdf`);
     } catch (e) {
       setError(e?.message || "Failed to generate agreement PDF. Please try again.");
     }
