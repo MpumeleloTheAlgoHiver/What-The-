@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import SignaturePad from "signature_pad";
 import jsPDF from "jspdf";
 import { Check, Home, Navigation, MapPin, Users, X, AlertCircle, PenTool } from "lucide-react";
+import { downloadPdfBuffer } from "../lib/pdfDownload";
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 const MINT_PURPLE   = [91, 33, 182];       // #5B21B6
@@ -18,8 +19,6 @@ const LABEL_CLR     = [100, 116, 139];     // Slate-500
 const VALUE_CLR     = [30, 41, 59];        // Slate-800
 const WHITE         = [255, 255, 255];
 
-const MINT_LOGO_URL =
-  "https://mfxnghmuccevsxwcetej.supabase.co/storage/v1/object/public/Mint%20Assets/tMOmeIOo4KE20Yh1bIuk8PFMlFHZ421rVESa2dcn.jpg";
 const CEO_SIGNATURE_URL = "/assets/ceo-signature.png";
 
 const PAGE_W  = 210;
@@ -108,7 +107,7 @@ function drawSectionHeading(doc, y, title) {
 }
 
 // ─── Rich branded header ──────────────────────────────────────────────────────
-function addPageHeader(doc, logoB64, pageNum, totalPages) {
+function addPageHeader(doc, pageNum, totalPages) {
   // White background
   doc.setFillColor(...WHITE);
   doc.rect(0, 0, PAGE_W, PAGE_H, "F");
@@ -129,24 +128,15 @@ function addPageHeader(doc, logoB64, pageNum, totalPages) {
   doc.circle(18, 5, 22, "F");
   doc.setGState(doc.GState({ opacity: 1 }));
 
-  // ── Mint logo, centred vertically in band ──
-  if (logoB64?.data) {
-    const aspect = logoB64.width / logoB64.height;
-    const lh = 14, lw = lh * aspect;
-    const lx = MARGIN;
-    const ly = (HEADER_H - lh) / 2;
-    doc.addImage(logoB64.data, "JPEG", lx, ly, lw, lh, undefined, "FAST");
-  }
-
-  // Company name next to logo
+  // Company name
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(...WHITE);
-  doc.text("Mint", MARGIN + 26, HEADER_H / 2 - 1);
+  doc.text("Mint", MARGIN, HEADER_H / 2 - 1);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...MINT_LIGHT);
-  doc.text("Financial Services (Pty) Ltd  ·  FSP No. 55118", MARGIN + 26, HEADER_H / 2 + 5);
+  doc.text("Financial Services (Pty) Ltd  ·  FSP No. 55118", MARGIN, HEADER_H / 2 + 5);
 
   // "CONFIDENTIAL" badge top-right
   doc.setFillColor(255, 255, 255);
@@ -220,10 +210,7 @@ function addCeoSignature(doc, ceoSigB64, y) {
 
 async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childData, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [logoB64, ceoSigB64] = await Promise.all([
-    fetchImageBase64(MINT_LOGO_URL),
-    fetchImageBase64(CEO_SIGNATURE_URL),
-  ]);
+  const ceoSigB64 = await fetchImageBase64(CEO_SIGNATURE_URL);
 
   const parentName = [parentProfile?.firstName, parentProfile?.lastName].filter(Boolean).join(" ") || "—";
   const parentId = parentProfile?.idNumber || "—";
@@ -237,7 +224,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
   });
   const allGuardianNames = [parentName, ...coGuardianProfiles.map(g => [g.firstName, g.lastName].filter(Boolean).join(" "))].join(" and ");
 
-  addPageHeader(doc, logoB64, 1, 1);
+  addPageHeader(doc, 1, 1);
 
   let y = HEADER_H + 9;
 
@@ -321,7 +308,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
 
   if (y > PAGE_H - 110) {
     doc.addPage();
-    addPageHeader(doc, logoB64, 2, 2);
+    addPageHeader(doc, 2, 2);
     y = MARGIN + 20;
   }
 
@@ -377,10 +364,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
 
 async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, childData, childAddress, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [logoB64, ceoSigB64] = await Promise.all([
-    fetchImageBase64(MINT_LOGO_URL),
-    fetchImageBase64(CEO_SIGNATURE_URL),
-  ]);
+  const ceoSigB64 = await fetchImageBase64(CEO_SIGNATURE_URL);
 
   const parentName = [parentProfile?.firstName, parentProfile?.lastName].filter(Boolean).join(" ") || "—";
   const parentId = parentProfile?.idNumber || "—";
@@ -395,7 +379,7 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
   const fullChildAddress = [childAddress.line1, childAddress.suburb, childAddress.city, childAddress.province, childAddress.postalCode].filter(Boolean).join(", ");
   const allGuardianNames = [parentName, ...coGuardianProfiles.map(g => [g.firstName, g.lastName].filter(Boolean).join(" "))].join(" and ");
 
-  addPageHeader(doc, logoB64, 1, 1);
+  addPageHeader(doc, 1, 1);
 
   let y = HEADER_H + 9;
 
@@ -472,7 +456,7 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
 
   if (y > PAGE_H - 110) {
     doc.addPage();
-    addPageHeader(doc, logoB64, 2, 2);
+    addPageHeader(doc, 2, 2);
     y = MARGIN + 20;
   }
 
@@ -524,19 +508,6 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
   legalNote2.forEach((l) => { doc.text(l, MARGIN, y); y += 3.8; });
 
   return doc.output("arraybuffer");
-}
-
-// ─── Download helper ──────────────────────────────────────────────────────────
-
-function downloadPdf(pdfBuffer, filename) {
-  const blob = new Blob([pdfBuffer], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -619,8 +590,8 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
       const signedAt = new Date().toISOString();
       const pdfBuffer = await buildSameAddressPdf({ parentProfile, coGuardianProfiles, childData, signatureDataUrl, signedAt });
       const safeName = (childData?.first_name || "minor").toLowerCase().replace(/\s+/g, "-");
-      downloadPdf(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
       await onComplete({ livesWithParent: true, pdfBuffer, signedAt });
+      downloadPdfBuffer(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
     } catch (e) {
       console.error("[poa]", e);
       setError(e?.message || "Failed to generate declaration. Please try again.");
@@ -644,8 +615,8 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
       const signedAt = new Date().toISOString();
       const pdfBuffer = await buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, childData, childAddress, signatureDataUrl, signedAt });
       const safeName = (childData?.first_name || "minor").toLowerCase().replace(/\s+/g, "-");
-      downloadPdf(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
       await onComplete({ livesWithParent: false, childAddress, pdfBuffer, signedAt });
+      downloadPdfBuffer(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
     } catch (e) {
       console.error("[poa]", e);
       setError(e?.message || "Failed to generate declaration. Please try again.");

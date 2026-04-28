@@ -672,8 +672,11 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
 
       if (livesWithParent && pdfBuffer) {
         const uint8 = new Uint8Array(pdfBuffer);
+        const CHUNK = 0x8000;
         let bin = "";
-        for (let i = 0; i < uint8.length; i++) bin += String.fromCharCode(uint8[i]);
+        for (let i = 0; i < uint8.length; i += CHUNK) {
+          bin += String.fromCharCode.apply(null, uint8.subarray(i, i + CHUNK));
+        }
         const pdfBase64 = btoa(bin);
         const res = await fetch("/api/onboarding/upload-agreement", {
           method: "POST",

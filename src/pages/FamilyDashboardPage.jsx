@@ -518,9 +518,11 @@ function AddMemberModal({ type, userId, profile, coGuardians = [], onSave, onClo
         signed_at: signedAt 
       };
       setChildComplete({ member: finalMember });
+      return true;
     } catch (err) {
       console.error("[agreement]", err);
       setError(err.message || "Finalization failed. Please try again.");
+      return false;
     } finally {
       setSaving(false);
     }
