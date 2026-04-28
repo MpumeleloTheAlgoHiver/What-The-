@@ -41,6 +41,11 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
     }
     setLoading(true);
 
+    // Safety timeout — stop spinner after 15s even if Supabase hangs
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
+
     try {
       const { data, error } = await supabase
         .from('loan_application')
@@ -72,7 +77,9 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
       setLoans(data || []);
     } catch (err) {
       console.error("Error fetching active loans:", err.message);
+      setLoans([]);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -269,8 +276,21 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
 
             const outstanding = loan.principal_amount || 0;
             const monthly = (loan.amount_repayable / loan.number_of_months) || 0;
-            const progress = loan.amount_repayable > 0
-              ? Math.max(0, ((loan.amount_repayable - outstanding) / loan.amount_repayable) * 100)
+
+            // Back-calculate original principal using prime rate to detect actual payments.
+            // amount_repayable = origPrincipal + interest(prime) + initiation + service_fees
+            // Estimating: progress only shows when principal has genuinely dropped via payments.
+            const PRIME_MONTHLY = 0.105 / 12;
+            const months = loan.number_of_months || 1;
+            const totalRepayable = Number(loan.amount_repayable || 0);
+            const estServiceFees = 69 * months;
+            const estInitiation = 1050;
+            const estOriginalPrincipal = Math.max(0,
+              (totalRepayable - estInitiation - estServiceFees) / (1 + PRIME_MONTHLY * months)
+            );
+            const amountPaid = Math.max(0, estOriginalPrincipal - outstanding);
+            const progress = totalRepayable > 0
+              ? Math.min(100, (amountPaid / totalRepayable) * 100)
               : 0;
 
             // Safely parse and format the first repayment date
