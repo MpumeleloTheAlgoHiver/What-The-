@@ -8,7 +8,7 @@ Two critical issues were identified and fixed for Android support:
 2. **Missing Biometric Permissions** ✅ FIXED - Added required Android permissions
 3. **App Icon Visibility** ✅ VERIFIED - Icon background color is appropriate
 
----
+----
 
 ## Issue 1: Biometric Login Hardcoded to iOS (CRITICAL)
 
