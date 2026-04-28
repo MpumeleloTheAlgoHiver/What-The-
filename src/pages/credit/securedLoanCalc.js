@@ -33,19 +33,35 @@ function calcInitiationFee(principal) {
 /**
  * 4-Day Rule: if next salary date is ≤ 4 days from origination,
  * push first payment to the following month.
+ *
+ * Safety: if the provided salary date is in the past, we advance it
+ * to the next future occurrence of the same day-of-month so we never
+ * compute negative days → negative interest/fees.
  */
 function determinePaymentDates(originationDate, nextSalaryDate, termMonths) {
   const dates = [];
-  const diffTime = nextSalaryDate - originationDate;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  let currentDate = new Date(nextSalaryDate);
-  if (diffDays <= 4) {
-    currentDate.setMonth(currentDate.getMonth() + 1);
-  }
-
   const salaryDay = nextSalaryDate.getDate();
 
+  // Build a "candidate" date = this month's salary day, at midnight
+  const today = new Date(originationDate);
+  today.setHours(0, 0, 0, 0);
+
+  let candidate = new Date(today.getFullYear(), today.getMonth(), salaryDay);
+
+  // If that day has already passed this month (or is today), move to next month
+  if (candidate <= today) {
+    candidate.setMonth(candidate.getMonth() + 1);
+    candidate.setDate(salaryDay); // re-set in case of month-end overflow
+  }
+
+  // Apply 4-Day Rule: if candidate is within 4 days of origination, push one more month
+  const diffDays = Math.ceil((candidate - originationDate) / (1000 * 60 * 60 * 24));
+  if (diffDays <= 4) {
+    candidate.setMonth(candidate.getMonth() + 1);
+    candidate.setDate(salaryDay);
+  }
+
+  let currentDate = new Date(candidate);
   for (let i = 0; i < termMonths; i++) {
     const pDate = new Date(currentDate);
     pDate.setDate(salaryDay);
