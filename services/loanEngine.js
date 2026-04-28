@@ -27,8 +27,91 @@ function clampToRange(value, min, max) {
 }
 
 function toFiniteNumber(value, fallback = null) {
-  const numeric = Number(value);
+  const normalized = typeof value === 'string'
+    ? value.replace(/[^0-9.-]/g, '')
+    : value;
+  if (normalized === '' || normalized === null || typeof normalized === 'undefined') {
+    return fallback;
+  }
+  const numeric = Number(normalized);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function readSummaryNumber(row = {}, keys = [], fallback = 0) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      const numeric = toFiniteNumber(row[key], null);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+  }
+  return fallback;
+}
+
+function summarizeTruidSummaryData(summaryData = []) {
+  const rows = Array.isArray(summaryData) ? summaryData.filter(Boolean) : [];
+  const monthCount = rows.length;
+
+  const monthlyRows = rows.map((row) => {
+    const mainIncome = readSummaryNumber(row, ['main_income', 'mainIncome'], 0);
+    const totalIncome = readSummaryNumber(row, ['total_income', 'totalIncome', 'income'], 0);
+    const totalExpenses = readSummaryNumber(row, ['total_expenses', 'totalExpenses', 'expenses'], 0);
+    const averageExpenses = readSummaryNumber(row, ['average_expenses', 'averageExpenses'], 0);
+    const totalDebtRepayments = readSummaryNumber(row, ['total_debt_repayments', 'totalDebtRepayments'], 0);
+    const averageDebtRepayments = readSummaryNumber(row, [
+      'average_debt_repayments',
+      'average__debt_repayments',
+      'averageDebtRepayments'
+    ], 0);
+
+    return {
+      year: row.year ?? null,
+      month: row.month ?? null,
+      mainIncome,
+      totalIncome,
+      totalExpenses,
+      averageExpenses,
+      totalDebtRepayments,
+      averageDebtRepayments,
+      netCashflow: totalIncome - totalExpenses
+    };
+  });
+
+  const totals = monthlyRows.reduce((acc, row) => {
+    acc.mainIncome += row.mainIncome;
+    acc.totalIncome += row.totalIncome;
+    acc.totalExpenses += row.totalExpenses;
+    acc.totalDebtRepayments += row.totalDebtRepayments || row.averageDebtRepayments || 0;
+    acc.averageExpenses += row.averageExpenses;
+    return acc;
+  }, {
+    mainIncome: 0,
+    totalIncome: 0,
+    totalExpenses: 0,
+    totalDebtRepayments: 0,
+    averageExpenses: 0
+  });
+
+  const divisor = monthCount || 1;
+  const averageMonthlyIncome = totals.totalIncome / divisor;
+  const averageMonthlyMainIncome = totals.mainIncome / divisor;
+  const averageMonthlyExpenses = totals.totalExpenses / divisor;
+  const averageMonthlyDebtRepayments = totals.totalDebtRepayments / divisor;
+  const averageMonthlyNetCashflow = averageMonthlyIncome - averageMonthlyExpenses;
+
+  return {
+    monthCount,
+    monthlyRows,
+    totalIncome: totals.totalIncome,
+    totalMainIncome: totals.mainIncome,
+    totalExpenses: totals.totalExpenses,
+    totalDebtRepayments: totals.totalDebtRepayments,
+    averageMonthlyIncome,
+    averageMonthlyMainIncome,
+    incomeForDti: averageMonthlyIncome > 0 ? averageMonthlyIncome : averageMonthlyMainIncome,
+    averageMonthlyExpenses,
+    averageMonthlyDebtRepayments,
+    averageMonthlyNetCashflow
+  };
 }
 
 function standardDeviation(values = []) {
@@ -178,20 +261,32 @@ function computeDeviceFingerprintContribution(deviceFingerprint = {}) {
   };
 }
 
-function computeDTIContribution(totalMonthlyDebt = 0, grossMonthlyIncome = 0) {
-  if (!grossMonthlyIncome || grossMonthlyIncome <= 0) {
+function computeDTIContribution(totalMonthlyDebt = 0, grossMonthlyIncome = 0, overrides = {}) {
+  const truidSummary = summarizeTruidSummaryData(overrides.truid_summary_data || overrides.summaryData || []);
+  const truidIncome = truidSummary.incomeForDti;
+  const truidDebt = truidSummary.averageMonthlyDebtRepayments;
+  const incomeUsed = truidSummary.monthCount > 0 && truidIncome > 0
+    ? truidIncome
+    : grossMonthlyIncome;
+  const debtUsed = truidSummary.monthCount > 0
+    ? truidDebt
+    : totalMonthlyDebt;
+
+  if (!incomeUsed || incomeUsed <= 0) {
     return {
       dtiRatio: null,
       dtiPercent: null,
-      totalMonthlyDebt,
-      grossMonthlyIncome,
+      totalMonthlyDebt: debtUsed,
+      grossMonthlyIncome: incomeUsed,
+      source: truidSummary.monthCount > 0 ? 'truid_summary_data' : 'bureau',
+      truidSummary,
       valuePercent: 0,
       weightPercent: DTI_WEIGHT,
       contributionPercent: 0
     };
   }
 
-  const dtiRatio = totalMonthlyDebt / grossMonthlyIncome;
+  const dtiRatio = debtUsed / incomeUsed;
   const dtiPercent = dtiRatio * 100;
 
   let valuePercent;
@@ -212,8 +307,10 @@ function computeDTIContribution(totalMonthlyDebt = 0, grossMonthlyIncome = 0) {
   return {
     dtiRatio,
     dtiPercent,
-    totalMonthlyDebt,
-    grossMonthlyIncome,
+    totalMonthlyDebt: debtUsed,
+    grossMonthlyIncome: incomeUsed,
+    source: truidSummary.monthCount > 0 ? 'truid_summary_data' : 'bureau',
+    truidSummary,
     valuePercent,
     weightPercent: DTI_WEIGHT,
     contributionPercent
@@ -451,15 +548,24 @@ function extractAverageBalance(summaryData = [], fallback = null) {
 }
 
 function computeBankStatementCashflowsContribution(overrides = {}) {
-  const monthsCaptured = toFiniteNumber(overrides.truid_months_captured, 0);
-  const avgMonthlyIncome = toFiniteNumber(overrides.truid_avg_monthly_income, 0);
-  const avgMonthlyExpenses = toFiniteNumber(overrides.truid_avg_monthly_expenses, 0);
-  const netMonthlyIncome = toFiniteNumber(
-    overrides.truid_net_monthly_income,
-    avgMonthlyIncome && avgMonthlyExpenses ? avgMonthlyIncome - avgMonthlyExpenses : 0
-  );
+  const summary = summarizeTruidSummaryData(overrides.truid_summary_data || []);
+  const monthsCaptured = summary.monthCount || toFiniteNumber(overrides.truid_months_captured, 0);
+  const avgMonthlyIncome = summary.monthCount > 0
+    ? summary.averageMonthlyIncome
+    : toFiniteNumber(overrides.truid_avg_monthly_income, 0);
+  const avgMonthlyExpenses = summary.monthCount > 0
+    ? summary.averageMonthlyExpenses
+    : toFiniteNumber(overrides.truid_avg_monthly_expenses, 0);
+  const netMonthlyIncome = summary.monthCount > 0
+    ? summary.averageMonthlyNetCashflow
+    : toFiniteNumber(
+      overrides.truid_net_monthly_income,
+      avgMonthlyIncome && avgMonthlyExpenses ? avgMonthlyIncome - avgMonthlyExpenses : 0
+    );
   const summaryData = Array.isArray(overrides.truid_summary_data) ? overrides.truid_summary_data : [];
-  const monthlyNetCashflows = extractMonthlyNetCashflows(summaryData);
+  const monthlyNetCashflows = summary.monthCount > 0
+    ? summary.monthlyRows.map((row) => row.netCashflow)
+    : extractMonthlyNetCashflows(summaryData);
   const averageBalance = extractAverageBalance(summaryData, overrides.truid_average_balance);
 
   const netCashflowRatio = avgMonthlyIncome > 0 ? netMonthlyIncome / avgMonthlyIncome : null;
@@ -523,6 +629,8 @@ function computeBankStatementCashflowsContribution(overrides = {}) {
     volatilityScore,
     monthsScore,
     balanceScore,
+    monthlyRows: summary.monthlyRows,
+    averageMonthlyDebtRepayments: summary.averageMonthlyDebtRepayments,
     valuePercent,
     weightPercent: BANK_STATEMENT_CASHFLOWS_WEIGHT,
     contributionPercent
@@ -596,6 +704,7 @@ export {
   computeContractTypeContribution,
   computeEmploymentCategoryContribution,
   computeIncomeStabilityContribution,
+  summarizeTruidSummaryData,
   computeBankStatementCashflowsContribution,
   computeAlgoHiveBehaviouralContribution
 };

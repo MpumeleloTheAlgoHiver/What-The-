@@ -10,6 +10,7 @@ import NavigationPill from "../../components/NavigationPill";
 import NotificationBell from "../../components/NotificationBell";
 import { supabase } from "../../lib/supabase";
 import FamilyDropdown from "../../components/FamilyDropdown";
+import { summarizeTruidSummaryData } from "../../../services/loanEngine.js";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -169,6 +170,7 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
   const [historyLoading, setHistoryLoading] = useState(true);
   const [scoreSnapshot, setScoreSnapshot] = useState(null);
   const [scoreLoading, setScoreLoading] = useState(true);
+  const [truidSnapshot, setTruidSnapshot] = useState(null);
   const [showLoanBreakdown, setShowLoanBreakdown] = useState(false);
   const [showDtiBreakdown, setShowDtiBreakdown] = useState(false);
   const [expandedTxnId, setExpandedTxnId] = useState(null);
@@ -269,6 +271,20 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
       } else {
         setScoreSnapshot(data || null);
       }
+      // Also load the latest TruID bank snapshot as a fallback for cashflow fields
+      try {
+        const { data: snapshotRow } = await supabase
+          .from('truid_bank_snapshots')
+          .select('months_captured,avg_monthly_income,avg_monthly_expenses,net_monthly_income,summary_data')
+          .eq('user_id', profile.id)
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setTruidSnapshot(snapshotRow || null);
+      } catch (snapErr) {
+        console.warn('Failed to fetch truid snapshot fallback:', snapErr?.message || snapErr);
+        setTruidSnapshot(null);
+      }
       setScoreLoading(false);
     }
 
@@ -354,6 +370,27 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
   const dtiBreakdown = engineResult?.dti || {};
   const incomeStability = engineResult?.incomeStability || {};
   const cashflowBreakdown = engineResult?.bankStatementCashflows || {};
+  const truidSummary = summarizeTruidSummaryData(truidSnapshot?.summary_data || dtiBreakdown?.truidSummary?.monthlyRows || []);
+  const dtiMonthlyIncome = truidSummary.monthCount
+    ? truidSummary.incomeForDti
+    : dtiBreakdown.grossMonthlyIncome ?? null;
+  const dtiMonthlyDebt = truidSummary.monthCount
+    ? truidSummary.averageMonthlyDebtRepayments
+    : dtiBreakdown.totalMonthlyDebt ?? null;
+  const dtiPercentFromSummary = dtiMonthlyIncome > 0
+    ? (dtiMonthlyDebt / dtiMonthlyIncome) * 100
+    : dtiBreakdown.dtiPercent;
+  const finalCashflow = {
+    monthsCaptured: truidSummary.monthCount || cashflowBreakdown.monthsCaptured || truidSnapshot?.months_captured || null,
+    avgMonthlyIncome: truidSummary.monthCount ? truidSummary.averageMonthlyIncome : cashflowBreakdown.avgMonthlyIncome ?? truidSnapshot?.avg_monthly_income ?? null,
+    avgMonthlyExpenses: truidSummary.monthCount ? truidSummary.averageMonthlyExpenses : cashflowBreakdown.avgMonthlyExpenses ?? truidSnapshot?.avg_monthly_expenses ?? null,
+    netMonthlyIncome: truidSummary.monthCount ? truidSummary.averageMonthlyNetCashflow : cashflowBreakdown.netMonthlyIncome ?? truidSnapshot?.net_monthly_income ?? null,
+    averageMonthlyDebtRepayments: truidSummary.monthCount ? truidSummary.averageMonthlyDebtRepayments : cashflowBreakdown.averageMonthlyDebtRepayments ?? null,
+    netCashflowRatio: truidSummary.averageMonthlyIncome > 0 ? truidSummary.averageMonthlyNetCashflow / truidSummary.averageMonthlyIncome : cashflowBreakdown.netCashflowRatio,
+    volatilityRatio: cashflowBreakdown.volatilityRatio,
+    averageBalance: cashflowBreakdown.averageBalance ?? null,
+    monthlyRows: truidSummary.monthlyRows.length ? truidSummary.monthlyRows : cashflowBreakdown.monthlyRows || []
+  };
   const creditUtilization = engineResult?.creditUtilization || {};
   const adverseListings = engineResult?.adverseListings || {};
   const employmentTenure = engineResult?.employmentTenure || {};
@@ -373,8 +410,18 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
   const engineTotalContribution = Number(scoreSnapshot?.engine_total_contribution);
   const annualIncome = Number(scoreSnapshot?.annual_income);
   const annualExpenses = Number(scoreSnapshot?.annual_expenses);
-  const monthlyIncomeFromSnapshot = Number.isFinite(annualIncome) ? annualIncome / 12 : null;
-  const monthlyExpensesFromSnapshot = Number.isFinite(annualExpenses) ? annualExpenses / 12 : null;
+  const effectiveAnnualIncome = truidSummary.monthCount
+    ? truidSummary.averageMonthlyIncome * 12
+    : annualIncome;
+  const effectiveAnnualExpenses = truidSummary.monthCount
+    ? truidSummary.averageMonthlyExpenses * 12
+    : annualExpenses;
+  const monthlyIncomeFromSnapshot = truidSummary.monthCount
+    ? truidSummary.averageMonthlyIncome
+    : Number.isFinite(annualIncome) ? annualIncome / 12 : null;
+  const monthlyExpensesFromSnapshot = truidSummary.monthCount
+    ? truidSummary.averageMonthlyExpenses
+    : Number.isFinite(annualExpenses) ? annualExpenses / 12 : null;
 
   const generateStatement = useCallback(async () => {
     if (!loan || generatingPdf) return;
@@ -1167,9 +1214,11 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
 
               <div className="rounded-[22px] border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">DTI calculation</p>
-                <DetailRow label="Gross monthly income used" value={fmtMoney(dtiBreakdown.grossMonthlyIncome ?? monthlyIncomeFromSnapshot)} />
-                <DetailRow label="Monthly debt obligation used" value={fmtMoney(dtiBreakdown.totalMonthlyDebt)} />
-                <DetailRow label="DTI ratio" value={formatPercentValue(dtiBreakdown.dtiPercent)} />
+                <DetailRow label="Source" value={truidSummary.monthCount ? "TruID summary_data" : dtiBreakdown.source || "Saved assessment"} />
+                <DetailRow label="Months counted" value={truidSummary.monthCount || dtiBreakdown?.truidSummary?.monthCount || "—"} />
+                <DetailRow label="Gross monthly income used" value={fmtMoney(dtiMonthlyIncome ?? monthlyIncomeFromSnapshot)} />
+                <DetailRow label="Monthly debt obligation used" value={fmtMoney(dtiMonthlyDebt)} />
+                <DetailRow label="DTI ratio" value={formatPercentValue(dtiPercentFromSummary)} />
                 <DetailRow label="DTI input score" value={formatPercentValue(dtiBreakdown.valuePercent)} />
                 <DetailRow
                   label="DTI weighted contribution"
@@ -1179,8 +1228,8 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
 
               <div className="rounded-[22px] border border-slate-100 bg-white p-4">
                 <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">Saved user inputs</p>
-                <DetailRow label="Annual income" value={fmtMoney(annualIncome)} />
-                <DetailRow label="Annual expenses" value={fmtMoney(annualExpenses)} />
+                <DetailRow label="Annual income" value={fmtMoney(effectiveAnnualIncome)} />
+                <DetailRow label="Annual expenses" value={fmtMoney(effectiveAnnualExpenses)} />
                 <DetailRow label="Monthly income estimate" value={fmtMoney(monthlyIncomeFromSnapshot)} />
                 <DetailRow label="Monthly expenses estimate" value={fmtMoney(monthlyExpensesFromSnapshot)} />
                 <DetailRow label="Employer" value={scoreSnapshot.employer_name} />
@@ -1193,14 +1242,37 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
               <div className="rounded-[22px] border border-slate-100 bg-white p-4">
                 <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">TruID and affordability</p>
                 <DetailRow label="Income stability reason" value={incomeStability.stabilityReason} />
-                <DetailRow label="Months captured" value={cashflowBreakdown.monthsCaptured ?? incomeStability.monthsCaptured} />
-                <DetailRow label="Average monthly income" value={fmtMoney(cashflowBreakdown.avgMonthlyIncome)} />
-                <DetailRow label="Average monthly expenses" value={fmtMoney(cashflowBreakdown.avgMonthlyExpenses)} />
-                <DetailRow label="Net monthly cashflow" value={fmtMoney(cashflowBreakdown.netMonthlyIncome)} />
-                <DetailRow label="Net cashflow ratio" value={formatDecimalAsPercent(cashflowBreakdown.netCashflowRatio)} />
-                <DetailRow label="Cashflow volatility ratio" value={formatDecimalAsPercent(cashflowBreakdown.volatilityRatio)} />
-                <DetailRow label="Average balance" value={fmtMoney(cashflowBreakdown.averageBalance)} />
+                <DetailRow label="Months captured" value={finalCashflow.monthsCaptured ?? incomeStability.monthsCaptured} />
+                <DetailRow label="Average monthly income" value={fmtMoney(finalCashflow.avgMonthlyIncome)} />
+                <DetailRow label="Average monthly expenses" value={fmtMoney(finalCashflow.avgMonthlyExpenses)} />
+                <DetailRow label="Net monthly cashflow" value={fmtMoney(finalCashflow.netMonthlyIncome)} />
+                <DetailRow label="Net cashflow ratio" value={formatDecimalAsPercent(finalCashflow.netCashflowRatio)} />
+                <DetailRow label="Cashflow volatility ratio" value={formatDecimalAsPercent(finalCashflow.volatilityRatio)} />
+                <DetailRow label="Average monthly debt repayments" value={fmtMoney(finalCashflow.averageMonthlyDebtRepayments)} />
+                <DetailRow label="Average balance" value={fmtMoney(finalCashflow.averageBalance)} />
               </div>
+
+              {finalCashflow.monthlyRows.length > 0 && (
+                <div className="rounded-[22px] border border-slate-100 bg-white p-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-3">Monthly TruID JSON rows</p>
+                  <div className="space-y-3">
+                    {finalCashflow.monthlyRows.map((row, index) => (
+                      <div key={`${row.year || "year"}-${row.month || "month"}-${index}`} className="rounded-2xl bg-slate-50 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[12px] font-semibold text-slate-900">{[row.month, row.year].filter(Boolean).join(" ") || `Month ${index + 1}`}</p>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">summary_data</span>
+                        </div>
+                        <DetailRow label="main_income" value={fmtMoney(row.mainIncome)} />
+                        <DetailRow label="total_income" value={fmtMoney(row.totalIncome)} />
+                        <DetailRow label="total_expenses" value={fmtMoney(row.totalExpenses)} />
+                        <DetailRow label="average_expenses" value={fmtMoney(row.averageExpenses)} />
+                        <DetailRow label="total_debt_repayments" value={fmtMoney(row.totalDebtRepayments)} />
+                        <DetailRow label="average_debt_repayments" value={fmtMoney(row.averageDebtRepayments)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-[22px] border border-slate-100 bg-white p-4">
                 <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">Bureau and profile signals</p>

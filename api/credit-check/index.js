@@ -11,6 +11,7 @@ import {
   computeContractTypeContribution,
   computeEmploymentCategoryContribution,
   computeIncomeStabilityContribution,
+  summarizeTruidSummaryData,
   computeBankStatementCashflowsContribution,
   computeAlgoHiveBehaviouralContribution
 } from "../../services/loanEngine.js";
@@ -170,12 +171,27 @@ export default async function handler(req, res) {
 
       truidSnapshot = snapshotData || null;
       if (snapshotData) {
+        const truidSummary = summarizeTruidSummaryData(snapshotData.summary_data || []);
         normalizedOverrides.truid_months_captured = snapshotData.months_captured;
         normalizedOverrides.truid_main_salary = snapshotData.main_salary;
-        normalizedOverrides.truid_avg_monthly_income = snapshotData.avg_monthly_income;
-        normalizedOverrides.truid_avg_monthly_expenses = snapshotData.avg_monthly_expenses;
-        normalizedOverrides.truid_net_monthly_income = snapshotData.net_monthly_income;
         normalizedOverrides.truid_summary_data = snapshotData.summary_data;
+        normalizedOverrides.truid_avg_monthly_income = truidSummary.monthCount
+          ? truidSummary.averageMonthlyIncome
+          : snapshotData.avg_monthly_income;
+        normalizedOverrides.truid_avg_monthly_expenses = truidSummary.monthCount
+          ? truidSummary.averageMonthlyExpenses
+          : snapshotData.avg_monthly_expenses;
+        normalizedOverrides.truid_net_monthly_income = truidSummary.monthCount
+          ? truidSummary.averageMonthlyNetCashflow
+          : snapshotData.net_monthly_income;
+        normalizedOverrides.truid_average_monthly_debt_repayments = truidSummary.averageMonthlyDebtRepayments;
+
+        if (truidSummary.monthCount) {
+          normalizedOverrides.annual_income = truidSummary.averageMonthlyIncome * 12;
+          normalizedOverrides.annual_expenses = truidSummary.averageMonthlyExpenses * 12;
+          normalizedOverrides.gross_monthly_income = truidSummary.incomeForDti;
+          normalizedOverrides.net_monthly_income = truidSummary.averageMonthlyNetCashflow;
+        }
       }
     } catch (snapshotError) {
       console.warn('TruID snapshot lookup failed:', snapshotError?.message || snapshotError);
@@ -405,7 +421,7 @@ export default async function handler(req, res) {
 
     const totalMonthlyDebt = accountMetrics.totalMonthlyInstallment || 0;
     const grossMonthlyIncome = Number(userPayload.gross_monthly_income || 0);
-    const dtiBreakdown = computeDTIContribution(totalMonthlyDebt, grossMonthlyIncome);
+    const dtiBreakdown = computeDTIContribution(totalMonthlyDebt, grossMonthlyIncome, userPayload);
 
     const employmentTenureBreakdown = computeEmploymentTenureContribution(userPayload.months_in_current_job);
     const contractTypeBreakdown = computeContractTypeContribution(userPayload.contract_type);
