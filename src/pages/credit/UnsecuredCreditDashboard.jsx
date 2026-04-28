@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowDown, Plus, FileText, Layers, ChevronRight,
@@ -97,12 +97,80 @@ const OfferRow = ({ icon: Icon, title, desc, onClick, disabled = false }) => (
 );
 
 // ─── Main component ───────────────────────────────────────────────────────────
+const ENGINE_LABELS = {
+  creditScore: "Credit score",
+  creditUtilization: "Credit utilisation",
+  adverseListings: "Adverse listings / judgements",
+  incomeStability: "Income stability",
+  dti: "Debt-to-income ratio",
+  bankStatementCashflows: "Bank statement cashflows",
+  employmentTenure: "Employment tenure",
+  employmentCategory: "Employer category",
+  contractType: "Contract type",
+  algoHiveBehavioural: "AlgoHive behavioural score",
+};
+
+const labelForEngineKey = (key) =>
+  ENGINE_LABELS[key] || key.replace(/([A-Z])/g, " $1").trim();
+
+const valueOrDash = (value) => {
+  if (value === null || typeof value === "undefined" || value === "") return "—";
+  return value;
+};
+
+const formatPercentValue = (value, decimals = 1) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  return `${numeric.toFixed(decimals)}%`;
+};
+
+const formatDecimalAsPercent = (value, decimals = 1) => {
+  if (value === null || typeof value === "undefined") return "—";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  return formatPercentValue(numeric * 100, decimals);
+};
+
+const DetailRow = ({ label, value }) => (
+  <div className="flex items-start justify-between gap-4 py-2 border-b border-slate-100 last:border-0">
+    <span className="text-[11px] font-medium text-slate-500">{label}</span>
+    <span className="text-[11px] font-semibold text-slate-900 text-right">{valueOrDash(value)}</span>
+  </div>
+);
+
+const EngineContributionRow = ({ item }) => {
+  const valuePct = Math.max(0, Math.min(100, Number(item.valuePercent || 0)));
+  const contribution = Number(item.contributionPercent || 0);
+  const weight = Number(item.weightPercent || 0);
+
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-semibold text-slate-900">{labelForEngineKey(item.key)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Input score {formatPercentValue(item.valuePercent)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[13px] font-black text-violet-700">{contribution.toFixed(1)}</p>
+          <p className="text-[10px] text-slate-400">of {weight} pts</p>
+        </div>
+      </div>
+      <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-full rounded-full bg-violet-500" style={{ width: `${valuePct}%` }} />
+      </div>
+    </div>
+  );
+};
+
 const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications }) => {
   const [loan, setLoan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [scoreSnapshot, setScoreSnapshot] = useState(null);
+  const [scoreLoading, setScoreLoading] = useState(true);
   const [showLoanBreakdown, setShowLoanBreakdown] = useState(false);
+  const [showDtiBreakdown, setShowDtiBreakdown] = useState(false);
   const [expandedTxnId, setExpandedTxnId] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
@@ -174,6 +242,39 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
   }, [profile?.id]);
 
   // ── derived values ────────────────────────────────────────────────────────
+  useEffect(() => {
+    async function fetchScoreSnapshot() {
+      if (!profile?.id || !supabase) {
+        setScoreSnapshot(null);
+        setScoreLoading(false);
+        return;
+      }
+
+      setScoreLoading(true);
+      const { data, error } = await supabase
+        .from("loan_engine_score")
+        .select(
+          "engine_score, experian_score, engine_total_contribution, annual_income, annual_expenses, " +
+          "years_current_employer, contract_type, is_new_borrower, employment_sector, employer_name, " +
+          "score_reasons, engine_result, created_at"
+        )
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("Failed to fetch loan engine score:", error.message || error);
+        setScoreSnapshot(null);
+      } else {
+        setScoreSnapshot(data || null);
+      }
+      setScoreLoading(false);
+    }
+
+    fetchScoreSnapshot();
+  }, [profile?.id]);
+
   const principal     = loan?.principal_amount  ?? 0;
   const totalRepay    = loan?.amount_repayable  ?? 0;
   const months        = loan?.number_of_months  ?? 0;
@@ -244,6 +345,37 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
     : "—";
 
   // ─── PDF statement generator ──────────────────────────────────────────────
+  const fmtMoney = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? formatZar(numeric) : "—";
+  };
+
+  const engineResult = scoreSnapshot?.engine_result || {};
+  const dtiBreakdown = engineResult?.dti || {};
+  const incomeStability = engineResult?.incomeStability || {};
+  const cashflowBreakdown = engineResult?.bankStatementCashflows || {};
+  const creditUtilization = engineResult?.creditUtilization || {};
+  const adverseListings = engineResult?.adverseListings || {};
+  const employmentTenure = engineResult?.employmentTenure || {};
+  const contractType = engineResult?.contractType || {};
+  const employmentCategory = engineResult?.employmentCategory || {};
+  const algoHiveBehavioural = engineResult?.algoHiveBehavioural || {};
+
+  const engineBreakdownItems = useMemo(() => {
+    if (!engineResult || typeof engineResult !== "object") return [];
+    return Object.entries(engineResult)
+      .filter(([, value]) => value && typeof value === "object" && Number.isFinite(Number(value.contributionPercent)))
+      .map(([key, value]) => ({ key, ...value }));
+  }, [engineResult]);
+
+  const engineScore = Number(scoreSnapshot?.engine_score);
+  const experianScore = Number(scoreSnapshot?.experian_score);
+  const engineTotalContribution = Number(scoreSnapshot?.engine_total_contribution);
+  const annualIncome = Number(scoreSnapshot?.annual_income);
+  const annualExpenses = Number(scoreSnapshot?.annual_expenses);
+  const monthlyIncomeFromSnapshot = Number.isFinite(annualIncome) ? annualIncome / 12 : null;
+  const monthlyExpensesFromSnapshot = Number.isFinite(annualExpenses) ? annualExpenses / 12 : null;
+
   const generateStatement = useCallback(async () => {
     if (!loan || generatingPdf) return;
     setGeneratingPdf(true);
@@ -976,7 +1108,137 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
           desc="Use your investments as collateral for lower rates"
           onClick={() => onTabChange?.("instantLiquidity")}
         />
+        <OfferRow
+          icon={FileText}
+          title="DTI breakdown"
+          desc={
+            scoreLoading
+              ? "Loading your saved affordability assessment"
+              : scoreSnapshot
+                ? "View the saved loan-engine score calculation"
+                : "No saved assessment found yet"
+          }
+          onClick={() => setShowDtiBreakdown(true)}
+          disabled={!scoreSnapshot}
+        />
       </div>
+
+      {/* --- DTI / LOAN ENGINE BREAKDOWN MODAL --- */}
+      {showDtiBreakdown && scoreSnapshot && portalTarget && createPortal(
+        <div className="fixed inset-0 z-[210] flex items-end sm:items-center justify-center bg-slate-900/45 backdrop-blur-sm px-4 py-4">
+          <button className="absolute inset-0" onClick={() => setShowDtiBreakdown(false)} />
+
+          <div className="relative w-full max-w-lg bg-white rounded-t-[32px] sm:rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar animate-in slide-in-from-bottom-4 duration-300">
+            <div className="sticky top-0 z-10 bg-white px-5 py-4 border-b border-slate-100 flex items-start justify-between rounded-t-[32px]">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-600">Loan engine</p>
+                <h3 className="text-lg font-semibold text-slate-900 mt-0.5">DTI breakdown</h3>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Saved {scoreSnapshot.created_at ? fmtDate(new Date(scoreSnapshot.created_at)) : "assessment"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDtiBreakdown(false)}
+                className="h-9 w-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="rounded-[24px] bg-[#160d2a] p-5 text-white">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45 font-bold">Final loan-engine score</p>
+                <div className="mt-2 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[42px] leading-none font-light">
+                      {Number.isFinite(engineScore) ? `${Math.round(engineScore)}%` : "—"}
+                    </p>
+                    <p className="text-[11px] text-white/45 mt-2">
+                      Raw contribution: {Number.isFinite(engineTotalContribution) ? engineTotalContribution.toFixed(1) : "—"} / 100
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-white/40 uppercase tracking-[0.12em]">Bureau score</p>
+                    <p className="text-lg font-semibold">{Number.isFinite(experianScore) ? experianScore : "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[22px] border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">DTI calculation</p>
+                <DetailRow label="Gross monthly income used" value={fmtMoney(dtiBreakdown.grossMonthlyIncome ?? monthlyIncomeFromSnapshot)} />
+                <DetailRow label="Monthly debt obligation used" value={fmtMoney(dtiBreakdown.totalMonthlyDebt)} />
+                <DetailRow label="DTI ratio" value={formatPercentValue(dtiBreakdown.dtiPercent)} />
+                <DetailRow label="DTI input score" value={formatPercentValue(dtiBreakdown.valuePercent)} />
+                <DetailRow
+                  label="DTI weighted contribution"
+                  value={`${Number(dtiBreakdown.contributionPercent || 0).toFixed(1)} / ${dtiBreakdown.weightPercent || 0} pts`}
+                />
+              </div>
+
+              <div className="rounded-[22px] border border-slate-100 bg-white p-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">Saved user inputs</p>
+                <DetailRow label="Annual income" value={fmtMoney(annualIncome)} />
+                <DetailRow label="Annual expenses" value={fmtMoney(annualExpenses)} />
+                <DetailRow label="Monthly income estimate" value={fmtMoney(monthlyIncomeFromSnapshot)} />
+                <DetailRow label="Monthly expenses estimate" value={fmtMoney(monthlyExpensesFromSnapshot)} />
+                <DetailRow label="Employer" value={scoreSnapshot.employer_name} />
+                <DetailRow label="Employment sector" value={scoreSnapshot.employment_sector} />
+                <DetailRow label="Contract type" value={scoreSnapshot.contract_type || contractType.contractType} />
+                <DetailRow label="Years at employer" value={scoreSnapshot.years_current_employer} />
+                <DetailRow label="New borrower" value={scoreSnapshot.is_new_borrower ? "Yes" : "No"} />
+              </div>
+
+              <div className="rounded-[22px] border border-slate-100 bg-white p-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">TruID and affordability</p>
+                <DetailRow label="Income stability reason" value={incomeStability.stabilityReason} />
+                <DetailRow label="Months captured" value={cashflowBreakdown.monthsCaptured ?? incomeStability.monthsCaptured} />
+                <DetailRow label="Average monthly income" value={fmtMoney(cashflowBreakdown.avgMonthlyIncome)} />
+                <DetailRow label="Average monthly expenses" value={fmtMoney(cashflowBreakdown.avgMonthlyExpenses)} />
+                <DetailRow label="Net monthly cashflow" value={fmtMoney(cashflowBreakdown.netMonthlyIncome)} />
+                <DetailRow label="Net cashflow ratio" value={formatDecimalAsPercent(cashflowBreakdown.netCashflowRatio)} />
+                <DetailRow label="Cashflow volatility ratio" value={formatDecimalAsPercent(cashflowBreakdown.volatilityRatio)} />
+                <DetailRow label="Average balance" value={fmtMoney(cashflowBreakdown.averageBalance)} />
+              </div>
+
+              <div className="rounded-[22px] border border-slate-100 bg-white p-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">Bureau and profile signals</p>
+                <DetailRow label="Credit utilisation" value={formatPercentValue(creditUtilization.ratioPercent)} />
+                <DetailRow label="Revolving balance" value={fmtMoney(creditUtilization.totalRevolvingBalance)} />
+                <DetailRow label="Revolving limit" value={fmtMoney(creditUtilization.totalRevolvingLimit)} />
+                <DetailRow label="Adverse listings / judgements" value={adverseListings.totalAdverse ?? 0} />
+                <DetailRow label="Employment tenure" value={employmentTenure.monthsInCurrentJob ? `${employmentTenure.monthsInCurrentJob} months` : "—"} />
+                <DetailRow label="Employer category" value={employmentCategory.matchLabel} />
+                <DetailRow label="AlgoHive KYC score" value={formatPercentValue(algoHiveBehavioural.kycScore)} />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 mb-2">Weighted score components</p>
+                <div className="space-y-2">
+                  {engineBreakdownItems.map((item) => (
+                    <EngineContributionRow key={item.key} item={item} />
+                  ))}
+                </div>
+              </div>
+
+              {Array.isArray(scoreSnapshot.score_reasons) && scoreSnapshot.score_reasons.length > 0 && (
+                <div className="rounded-[22px] border border-amber-100 bg-amber-50 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-amber-700 mb-2">Score reasons</p>
+                  <ul className="space-y-1.5">
+                    {scoreSnapshot.score_reasons.map((reason, index) => (
+                      <li key={`${reason}-${index}`} className="text-[12px] text-amber-800">
+                        {typeof reason === "string" ? reason : reason?.factor || reason?.detail || "Assessment note"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        portalTarget
+      )}
 
       {/* --- MINT EFT PAYMENT MODAL --- */}
       {showEftModal && loan && portalTarget && createPortal(
