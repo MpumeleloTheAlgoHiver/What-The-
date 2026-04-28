@@ -7,14 +7,13 @@ const LABEL_MAP = {
   creditScore: "Credit Score",
   creditUtilization: "Credit Utilisation",
   adverseListings: "Adverse Listings",
-  deviceFingerprint: "Device Fingerprint",
-  dti: "Debt-to-Income",
-  employmentTenure: "Employment Tenure",
-  contractType: "Contract Type",
-  employmentCategory: "Employment Category",
   incomeStability: "Income Stability",
-  algolendRepayment: "Repayment History",
-  aglRetrieval: "Account Retrieval",
+  dti: "Debt-to-Income",
+  bankStatementCashflows: "Bank Statement Cashflows",
+  employmentTenure: "Employment Tenure",
+  employmentCategory: "Employment Category",
+  contractType: "Contract Type",
+  algoHiveBehavioural: "AlgoHive Behavioural Score",
 };
 const adjustLabel = (key) =>
   LABEL_MAP[key] || key.replace(/([A-Z])/g, " $1").trim();

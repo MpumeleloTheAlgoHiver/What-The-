@@ -3,29 +3,40 @@ const CREDIT_SCORE_MAX = 850;
 const CREDIT_SCORE_WEIGHT = 25; // percent
 const CREDIT_UTILIZATION_WEIGHT = 5; // percent
 const ADVERSE_LISTINGS_WEIGHT = 10; // percent
-const DEVICE_IP_WEIGHT = 2; // percent
-const DTI_WEIGHT = 15; // percent
-const EMPLOYMENT_TENURE_WEIGHT = 5; // percent
-const CONTRACT_TYPE_WEIGHT = 5; // percent
-const EMPLOYMENT_CATEGORY_WEIGHT = 5; // percent
 const INCOME_STABILITY_WEIGHT = 10; // percent
-const ALGOLEND_REPAYMENT_WEIGHT = 3; // percent
-const AGL_RETRIEVAL_WEIGHT = 5; // percent
+const DTI_WEIGHT = 10; // percent
+const BANK_STATEMENT_CASHFLOWS_WEIGHT = 10; // percent
+const EMPLOYMENT_TENURE_WEIGHT = 5; // percent
+const EMPLOYMENT_CATEGORY_WEIGHT = 5; // percent
+const CONTRACT_TYPE_WEIGHT = 5; // percent
+const ALGOHIVE_BEHAVIOURAL_WEIGHT = 15; // percent
 
 const TOTAL_LOAN_ENGINE_WEIGHT = CREDIT_SCORE_WEIGHT
   + CREDIT_UTILIZATION_WEIGHT
   + ADVERSE_LISTINGS_WEIGHT
-  + DEVICE_IP_WEIGHT
-  + DTI_WEIGHT
-  + EMPLOYMENT_TENURE_WEIGHT
-  + CONTRACT_TYPE_WEIGHT
-  + EMPLOYMENT_CATEGORY_WEIGHT
   + INCOME_STABILITY_WEIGHT
-  + ALGOLEND_REPAYMENT_WEIGHT
-  + AGL_RETRIEVAL_WEIGHT;
+  + DTI_WEIGHT
+  + BANK_STATEMENT_CASHFLOWS_WEIGHT
+  + EMPLOYMENT_TENURE_WEIGHT
+  + EMPLOYMENT_CATEGORY_WEIGHT
+  + CONTRACT_TYPE_WEIGHT
+  + ALGOHIVE_BEHAVIOURAL_WEIGHT;
 
 function clampToRange(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function toFiniteNumber(value, fallback = null) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function standardDeviation(values = []) {
+  const numericValues = values.map((value) => Number(value)).filter(Number.isFinite);
+  if (!numericValues.length) return null;
+  const mean = numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+  const variance = numericValues.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / numericValues.length;
+  return Math.sqrt(variance);
 }
 
 function computeCreditScoreContribution(score = 0) {
@@ -156,15 +167,14 @@ function computeDeviceFingerprintContribution(deviceFingerprint = {}) {
   const requiredSignals = signals.length || 1;
   const completenessRatio = signalsCaptured / requiredSignals;
   const valuePercent = completenessRatio * 100;
-  const contributionPercent = valuePercent * (DEVICE_IP_WEIGHT / 100);
 
   return {
     ...deviceFingerprint,
     signalsCaptured,
     requiredSignals,
     valuePercent,
-    weightPercent: DEVICE_IP_WEIGHT,
-    contributionPercent
+    weightPercent: 0,
+    contributionPercent: 0
   };
 }
 
@@ -185,16 +195,14 @@ function computeDTIContribution(totalMonthlyDebt = 0, grossMonthlyIncome = 0) {
   const dtiPercent = dtiRatio * 100;
 
   let valuePercent;
-  if (dtiPercent <= 30) {
+  if (dtiPercent <= 35) {
     valuePercent = 100;
-  } else if (dtiPercent <= 40) {
-    valuePercent = 90;
   } else if (dtiPercent <= 50) {
-    valuePercent = 75;
-  } else if (dtiPercent <= 60) {
+    valuePercent = 85;
+  } else if (dtiPercent <= 65) {
     valuePercent = 60;
   } else if (dtiPercent <= 75) {
-    valuePercent = 50;
+    valuePercent = 35;
   } else {
     valuePercent = 0;
   }
@@ -367,9 +375,15 @@ function computeIncomeStabilityContribution(overrides = {}) {
   let valuePercent = 0;
   let stabilityReason = 'Income stability not evaluated';
 
-  if (Number.isFinite(monthsCaptured) && monthsCaptured >= 4 && Number.isFinite(mainSalary) && mainSalary > 0) {
+  if (Number.isFinite(monthsCaptured) && monthsCaptured >= 6 && Number.isFinite(mainSalary) && mainSalary > 0) {
     valuePercent = 100;
-    stabilityReason = 'TruID snapshot: 4+ months with main salary detected';
+    stabilityReason = 'TruID snapshot: 6+ months with recurring main salary detected';
+  } else if (Number.isFinite(monthsCaptured) && monthsCaptured >= 4 && Number.isFinite(mainSalary) && mainSalary > 0) {
+    valuePercent = 85;
+    stabilityReason = 'TruID snapshot: 4-5 months with recurring main salary detected';
+  } else if (Number.isFinite(monthsCaptured) && monthsCaptured >= 3 && Number.isFinite(mainSalary) && mainSalary > 0) {
+    valuePercent = 70;
+    stabilityReason = 'TruID snapshot: 3 months with recurring main salary detected';
   } else if (rawSector === 'GOVERNMENT' && employerName) {
     valuePercent = 100;
     stabilityReason = 'Government employee - automatic 100%';
@@ -390,31 +404,183 @@ function computeIncomeStabilityContribution(overrides = {}) {
   };
 }
 
-function computeAlgolendRepaymentContribution(isNewBorrower = null) {
-  const normalized = typeof isNewBorrower === 'string'
-    ? isNewBorrower.toLowerCase()
-    : isNewBorrower;
-  const interpreted = normalized === true || normalized === 'true' || normalized === 'yes';
-  const valuePercent = interpreted ? 100 : 50;
-  const contributionPercent = valuePercent * (ALGOLEND_REPAYMENT_WEIGHT / 100);
+function extractMonthlyNetCashflows(summaryData = []) {
+  if (!Array.isArray(summaryData)) return [];
+
+  return summaryData
+    .map((month) => {
+      const income = toFiniteNumber(
+        month?.total_income ?? month?.income ?? month?.totalIncome,
+        null
+      );
+      const expenses = toFiniteNumber(
+        month?.total_expenses ?? month?.expenses ?? month?.totalExpenses,
+        null
+      );
+      const net = toFiniteNumber(
+        month?.net_income ?? month?.net_cashflow ?? month?.netCashflow,
+        null
+      );
+
+      if (Number.isFinite(net)) return net;
+      if (Number.isFinite(income) && Number.isFinite(expenses)) return income - expenses;
+      return null;
+    })
+    .filter(Number.isFinite);
+}
+
+function extractAverageBalance(summaryData = [], fallback = null) {
+  const fallbackBalance = toFiniteNumber(fallback, null);
+  if (!Array.isArray(summaryData) || !summaryData.length) return fallbackBalance;
+
+  const balances = summaryData
+    .map((month) => toFiniteNumber(
+      month?.average_balance
+        ?? month?.avg_balance
+        ?? month?.averageBalance
+        ?? month?.closing_balance
+        ?? month?.closingBalance
+        ?? month?.current_balance
+        ?? month?.balance,
+      null
+    ))
+    .filter(Number.isFinite);
+
+  if (!balances.length) return fallbackBalance;
+  return balances.reduce((sum, value) => sum + value, 0) / balances.length;
+}
+
+function computeBankStatementCashflowsContribution(overrides = {}) {
+  const monthsCaptured = toFiniteNumber(overrides.truid_months_captured, 0);
+  const avgMonthlyIncome = toFiniteNumber(overrides.truid_avg_monthly_income, 0);
+  const avgMonthlyExpenses = toFiniteNumber(overrides.truid_avg_monthly_expenses, 0);
+  const netMonthlyIncome = toFiniteNumber(
+    overrides.truid_net_monthly_income,
+    avgMonthlyIncome && avgMonthlyExpenses ? avgMonthlyIncome - avgMonthlyExpenses : 0
+  );
+  const summaryData = Array.isArray(overrides.truid_summary_data) ? overrides.truid_summary_data : [];
+  const monthlyNetCashflows = extractMonthlyNetCashflows(summaryData);
+  const averageBalance = extractAverageBalance(summaryData, overrides.truid_average_balance);
+
+  const netCashflowRatio = avgMonthlyIncome > 0 ? netMonthlyIncome / avgMonthlyIncome : null;
+  let netCashflowScore = 0;
+  if (Number.isFinite(netCashflowRatio)) {
+    if (netCashflowRatio >= 0.25) netCashflowScore = 100;
+    else if (netCashflowRatio >= 0.15) netCashflowScore = 85;
+    else if (netCashflowRatio >= 0.05) netCashflowScore = 65;
+    else if (netCashflowRatio >= 0) netCashflowScore = 45;
+    else netCashflowScore = 0;
+  }
+
+  let volatilityScore = 0;
+  let volatilityRatio = null;
+  if (monthlyNetCashflows.length >= 3) {
+    const averageNet = monthlyNetCashflows.reduce((sum, value) => sum + value, 0) / monthlyNetCashflows.length;
+    const deviation = standardDeviation(monthlyNetCashflows);
+    const denominator = Math.max(Math.abs(averageNet), 1);
+    volatilityRatio = Number.isFinite(deviation) ? deviation / denominator : null;
+
+    if (volatilityRatio !== null && volatilityRatio <= 0.25) volatilityScore = 100;
+    else if (volatilityRatio !== null && volatilityRatio <= 0.5) volatilityScore = 80;
+    else if (volatilityRatio !== null && volatilityRatio <= 0.75) volatilityScore = 60;
+    else if (volatilityRatio !== null && volatilityRatio <= 1) volatilityScore = 40;
+    else volatilityScore = 20;
+  } else if (monthsCaptured >= 3 && avgMonthlyIncome > 0) {
+    volatilityScore = 50;
+  }
+
+  let monthsScore = 0;
+  if (monthsCaptured >= 6) monthsScore = 100;
+  else if (monthsCaptured >= 4) monthsScore = 85;
+  else if (monthsCaptured >= 3) monthsScore = 70;
+
+  let balanceScore = null;
+  if (Number.isFinite(averageBalance)) {
+    const incomeReference = Math.max(avgMonthlyIncome, 1);
+    const balanceRatio = averageBalance / incomeReference;
+    if (balanceRatio >= 0.5) balanceScore = 100;
+    else if (balanceRatio >= 0.25) balanceScore = 80;
+    else if (balanceRatio >= 0.1) balanceScore = 55;
+    else if (balanceRatio >= 0) balanceScore = 35;
+  }
+
+  const valuePercent = balanceScore === null
+    ? (netCashflowScore * 0.45) + (volatilityScore * 0.30) + (monthsScore * 0.25)
+    : (netCashflowScore * 0.35) + (volatilityScore * 0.25) + (monthsScore * 0.20) + (balanceScore * 0.20);
+
+  const contributionPercent = valuePercent * (BANK_STATEMENT_CASHFLOWS_WEIGHT / 100);
 
   return {
-    isNewBorrower: interpreted,
+    monthsCaptured,
+    avgMonthlyIncome,
+    avgMonthlyExpenses,
+    netMonthlyIncome,
+    netCashflowRatio,
+    monthlyNetCashflows,
+    volatilityRatio,
+    averageBalance,
+    netCashflowScore,
+    volatilityScore,
+    monthsScore,
+    balanceScore,
     valuePercent,
-    weightPercent: ALGOLEND_REPAYMENT_WEIGHT,
+    weightPercent: BANK_STATEMENT_CASHFLOWS_WEIGHT,
     contributionPercent
   };
 }
 
-function computeAglRetrievalContribution() {
-  const valuePercent = 100;
-  const contributionPercent = valuePercent * (AGL_RETRIEVAL_WEIGHT / 100);
+function computeAlgoHiveBehaviouralContribution(overrides = {}, deviceFingerprint = {}) {
+  const hasPackDetails = Boolean(overrides.kyc_has_pack_details);
+  const identityVerified = Boolean(overrides.kyc_identity_verified || overrides.identity_number);
+  const addressVerified = Boolean(overrides.kyc_address_verified || overrides.address1);
+  const normalizedKycResult = String(
+    overrides.kyc_result
+      ?? overrides.kyc_review_result
+      ?? overrides.sumsub_review_result
+      ?? overrides.kyc_status
+      ?? ''
+  ).trim().toUpperCase();
+  const explicitKycScore = toFiniteNumber(overrides.kyc_score ?? overrides.algohive_kyc_score, null);
+
+  let kycScore;
+  if (Number.isFinite(explicitKycScore)) {
+    kycScore = clampToRange(explicitKycScore, 0, 100);
+  } else if (['GREEN', 'APPROVED', 'COMPLETED', 'VERIFIED', 'PASS'].includes(normalizedKycResult)) {
+    kycScore = 100;
+  } else if (['YELLOW', 'REVIEW', 'PENDING', 'MANUAL_REVIEW'].includes(normalizedKycResult)) {
+    kycScore = 60;
+  } else if (['RED', 'REJECTED', 'FAILED', 'DECLINED'].includes(normalizedKycResult)) {
+    kycScore = 0;
+  } else {
+    kycScore = (hasPackDetails ? 40 : 0) + (identityVerified ? 30 : 0) + (addressVerified ? 20 : 0);
+  }
+
+  const deviceSignals = ['ip', 'userAgent'];
+  const deviceScore = deviceSignals.length
+    ? (deviceSignals.filter((key) => deviceFingerprint?.[key]).length / deviceSignals.length) * 100
+    : 0;
+
+  const normalizedNewBorrower = typeof overrides.algolend_is_new_borrower === 'string'
+    ? overrides.algolend_is_new_borrower.toLowerCase()
+    : overrides.algolend_is_new_borrower;
+  const borrowerBehaviourScore = normalizedNewBorrower === true || normalizedNewBorrower === 'true' || normalizedNewBorrower === 'yes'
+    ? 100
+    : 60;
+
+  const valuePercent = (kycScore * 0.70) + (deviceScore * 0.15) + (borrowerBehaviourScore * 0.15);
+  const contributionPercent = valuePercent * (ALGOHIVE_BEHAVIOURAL_WEIGHT / 100);
 
   return {
+    hasPackDetails,
+    identityVerified,
+    addressVerified,
+    kycResult: normalizedKycResult || null,
+    kycScore,
+    deviceScore,
+    borrowerBehaviourScore,
     valuePercent,
-    weightPercent: AGL_RETRIEVAL_WEIGHT,
-    contributionPercent,
-    automatic: true
+    weightPercent: ALGOHIVE_BEHAVIOURAL_WEIGHT,
+    contributionPercent
   };
 }
 
@@ -430,6 +596,6 @@ export {
   computeContractTypeContribution,
   computeEmploymentCategoryContribution,
   computeIncomeStabilityContribution,
-  computeAlgolendRepaymentContribution,
-  computeAglRetrievalContribution
+  computeBankStatementCashflowsContribution,
+  computeAlgoHiveBehaviouralContribution
 };
