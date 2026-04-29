@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ArrowLeft, Info, Plus, Minus, ChevronDown, ChevronUp, X } from "lucide-react";
+import { ArrowLeft, Info, Plus, Minus, ChevronDown, ChevronUp, X, Download } from "lucide-react";
 import { formatCurrency } from "../lib/formatCurrency";
 import PdfViewer from "../components/PdfViewer";
 import { supabase } from "../lib/supabase";
@@ -347,13 +347,23 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
             <h2 className="text-sm font-semibold text-slate-900">
               Strategy Mandate
             </h2>
-            <button
-              type="button"
-              onClick={() => setShowMandateModal(false)}
-              className="p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-            >
-              <X className="h-5 w-5 text-slate-600" />
-            </button>
+            <div className="flex items-center gap-1">
+              <a
+                href="/strategy-disclosures.pdf"
+                download="Strategy-Mandate.pdf"
+                className="p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                aria-label="Download PDF"
+              >
+                <Download className="h-5 w-5 text-slate-600" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowMandateModal(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5 text-slate-600" />
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-hidden">
             <PdfViewer
