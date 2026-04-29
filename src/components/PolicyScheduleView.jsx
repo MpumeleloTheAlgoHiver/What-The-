@@ -158,7 +158,7 @@ export default function PolicyScheduleView({
   const fullName   = `${firstName} ${lastName}`.trim();
   const BASE       = typeof window !== "undefined" ? window.location.origin : "";
   const heroImg    = `${BASE}/assets/images/hands-hero.jpeg`;
-  const mintLogo   = `${BASE}/assets/LOGO%202%20WHITE%20MINT.svg`;
+  const mintLogo   = `${BASE}/assets/afriverse-logo.svg`;
 
   const planRows = [
     ["Product Name",    planLabel             || "—"],
@@ -178,7 +178,7 @@ export default function PolicyScheduleView({
         style={{ background: PURPLE_DARK }}
       >
         <div className="flex items-center gap-3">
-          <img src={mintLogo} alt="Mint" className="h-6 w-auto" />
+          <img src={mintLogo} alt="AfriVerse" className="h-6 w-auto" />
           <div>
             <p className="text-[10px] text-white/60 uppercase tracking-widest leading-none">
               Wills &amp; Funeral Specialists

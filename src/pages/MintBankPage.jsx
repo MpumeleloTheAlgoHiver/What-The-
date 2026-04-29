@@ -863,7 +863,7 @@ const MintBankPage = ({ onBack, onComplete }) => {
         <div style={{ animation: "subtleBounce 3s ease-in-out infinite" }}>
           <img
             src="/assets/images/coinAlgoMoney.png"
-            alt="Mint"
+            alt="AfriVerse"
             className="h-20 w-20 object-contain drop-shadow-2xl"
           />
         </div>

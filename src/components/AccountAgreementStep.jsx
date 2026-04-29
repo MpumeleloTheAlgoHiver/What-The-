@@ -287,8 +287,8 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   const parties = [
     ["Between", true],
     ["", false],
-    ["Mint Platforms (Pty) Ltd, trading as Mint", true],
-    ['Registration Number: 2024/644796/07 ("Mint")', false],
+    ["AfriVerse Platforms (Pty) Ltd, trading as AfriVerse", true],
+    ['Registration Number: 2024/644796/07 ("AfriVerse")', false],
     ["", false],
     ["and", true],
     ["", false],
@@ -338,9 +338,9 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   };
 
   writeHeading("1. APPOINTMENT");
-  writePara(`The Client hereby appoints Mint Platforms (Pty) Ltd, trading as Mint ("Mint"), to act as its authorised securities administrator for purposes of facilitating the custody, administration and record-keeping of securities held by the Client.`);
-  writePara(`The Client further authorises Mint to facilitate the opening and maintenance of an account in the Client's name with an appointed nominee custodian, or its affiliated companies, acting as nominee and custodian, for the purpose of holding and administering securities on behalf of the Client.`);
-  writePara("Mint is authorised to:");
+  writePara(`The Client hereby appoints AfriVerse Platforms (Pty) Ltd, trading as AfriVerse ("AfriVerse"), to act as its authorised securities administrator for purposes of facilitating the custody, administration and record-keeping of securities held by the Client.`);
+  writePara(`The Client further authorises AfriVerse to facilitate the opening and maintenance of an account in the Client's name with an appointed nominee custodian, or its affiliated companies, acting as nominee and custodian, for the purpose of holding and administering securities on behalf of the Client.`);
+  writePara("AfriVerse is authorised to:");
   writePara("1.1  Facilitate the opening and administration of the Client's securities account with the appointed nominee custodian, including the submission of all required documentation and client information.", 4);
   writePara("1.2  Administer, record, and facilitate the holding of securities beneficially owned by the Client through the nominee and custody structure.", 4);
   writePara("1.3  Interface and communicate with relevant transfer secretaries, custodians, central securities depositories, settlement agents, and registry service providers in order to give effect to the Client's investment holdings.", 4);
@@ -351,7 +351,7 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   writeBullet("a nominee structure, or");
   writeBullet("underlying accounts opened in the Client's name with a custodian or registry service provider.");
   y += 2;
-  writePara("2.2  Where required by the relevant service provider, Mint is authorised to facilitate the opening of such underlying accounts in the Client's name for purposes of recording ownership of securities.", 4);
+  writePara("2.2  Where required by the relevant service provider, AfriVerse is authorised to facilitate the opening of such underlying accounts in the Client's name for purposes of recording ownership of securities.", 4);
   writePara("2.3  The Client consents to Mint providing the Client's information to relevant service providers for the purpose of establishing such accounts.", 4);
 
   writeHeading("3. RECORD OF OWNERSHIP");
@@ -367,7 +367,7 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   writeBullet("corporate actions");
   writeBullet("other administrative matters relating to the Client's securities.");
   y += 2;
-  writePara("4.2  Instructions may be provided through electronic platforms, written instruction, or other communication channels approved by Mint.", 4);
+  writePara("4.2  Instructions may be provided through electronic platforms, written instruction, or other communication channels approved by AfriVerse.", 4);
 
   writeHeading("5. INFORMATION SHARING");
   writePara("5.1  The Client authorises Mint to provide relevant client information and investment details to third-party service providers including but not limited to:", 4);
@@ -397,7 +397,7 @@ async function buildPDF({ profile, onboardingData, packDetail, signatureDataUrl,
   const cx = MARGIN + colW + 10;
 
   bold(8.5); color(40, 40, 40);
-  doc.text("For and on behalf of Mint Platforms (Pty) Ltd", MARGIN, y);
+  doc.text("For and on behalf of AfriVerse Platforms (Pty) Ltd", MARGIN, y);
   norm(8.5);
   doc.text("Name: Lonwabo Damane", MARGIN, y + 5);
   doc.text("Title: Chief Executive Officer", MARGIN, y + 10);
@@ -985,9 +985,9 @@ export default function AccountAgreementStep({
           <div style={{ padding: "24px 28px", maxHeight: 480, overflowY: "auto", fontSize: 13, lineHeight: 1.7, color: "#222" }}>
             <p style={{ textAlign: "center", marginBottom: 16 }}><strong>Between</strong></p>
             <p style={{ textAlign: "center", marginBottom: 4 }}>
-              <strong>Mint Platforms (Pty) Ltd</strong>, trading as <strong>Mint</strong><br />
+              <strong>AfriVerse Platforms (Pty) Ltd</strong>, trading as <strong>AfriVerse</strong><br />
               Registration Number: 2024/644796/07<br />
-              (&quot;Mint&quot;)
+              (&quot;AfriVerse&quot;)
             </p>
             <p style={{ textAlign: "center", margin: "12px 0" }}>and</p>
             <div style={{
@@ -1006,9 +1006,9 @@ export default function AccountAgreementStep({
             <hr style={{ border: "none", borderTop: `1px solid ${purpleBorder}`, margin: "20px 0" }} />
 
             <p><strong style={{ color: purple }}>1. APPOINTMENT</strong></p>
-            <p>The Client hereby appoints <strong>Mint Platforms (Pty) Ltd, trading as Mint (&quot;Mint&quot;)</strong>, to act as its authorised securities administrator for purposes of facilitating the custody, administration and record-keeping of securities held by the Client.</p>
-            <p>The Client further authorises Mint to facilitate the opening and maintenance of an account in the Client&apos;s name with <strong>an appointed nominee custodian</strong>, or its affiliated companies, acting as nominee and custodian, for the purpose of holding and administering securities on behalf of the Client.</p>
-            <p>Mint is authorised to:</p>
+            <p>The Client hereby appoints <strong>AfriVerse Platforms (Pty) Ltd, trading as AfriVerse (&quot;AfriVerse&quot;)</strong>, to act as its authorised securities administrator for purposes of facilitating the custody, administration and record-keeping of securities held by the Client.</p>
+            <p>The Client further authorises AfriVerse to facilitate the opening and maintenance of an account in the Client&apos;s name with <strong>an appointed nominee custodian</strong>, or its affiliated companies, acting as nominee and custodian, for the purpose of holding and administering securities on behalf of the Client.</p>
+            <p>AfriVerse is authorised to:</p>
             <p style={{ paddingLeft: 16 }}><strong>1.1</strong> Facilitate the opening and administration of the Client&apos;s securities account with <strong>the appointed nominee custodian</strong>, including the submission of all required documentation and client information.</p>
             <p style={{ paddingLeft: 16 }}><strong>1.2</strong> Administer, record, and facilitate the holding of securities beneficially owned by the Client through the nominee and custody structure.</p>
             <p style={{ paddingLeft: 16 }}><strong>1.3</strong> Interface and communicate with relevant transfer secretaries, custodians, central securities depositories, settlement agents, and registry service providers in order to give effect to the Client&apos;s investment holdings.</p>
