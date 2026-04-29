@@ -232,9 +232,32 @@ const CreditHome = ({ profile, onOpenNotifications, onTabChange }) => {
           {ctaCards.map((item, i) => (
             <button
               key={i}
-              onClick={() => {
-                const needsConsent = !profile?.declarations?.debicheck_consent?.agreed;
-                if (needsConsent) {
+              onClick={async () => {
+                if (navigating) return;
+
+                let hasDeclarations = profile?.declarations && Object.keys(profile.declarations).length > 0;
+
+                if (!hasDeclarations && profile?.id) {
+                  setNavigating(true);
+                  try {
+                    const { data } = await supabase
+                      .from('profiles')
+                      .select('declarations')
+                      .eq('id', profile.id)
+                      .single();
+                    
+                    if (data?.declarations && Object.keys(data.declarations).length > 0) {
+                      hasDeclarations = true;
+                      profile.declarations = data.declarations;
+                    }
+                  } catch (err) {
+                    console.error("Failed to check declarations", err);
+                  } finally {
+                    setNavigating(false);
+                  }
+                }
+
+                if (!hasDeclarations) {
                   setPendingAction(item.id);
                   setShowConsentModal(true);
                 } else {

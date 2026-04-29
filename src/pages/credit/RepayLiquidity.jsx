@@ -190,9 +190,9 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
           <div className="relative z-10 flex justify-between items-start">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/60 mb-2">Total Outstanding Debt</p>
-              <p className="text-4xl font-light tracking-tight drop-shadow-md" style={{ fontFamily: fonts?.display }}>
-                {loading ? "..." : formatZar(totalDebt)}
-              </p>
+              <div className="min-h-[40px] flex items-center">
+                {loading ? <div className="h-9 w-40 bg-white/20 animate-pulse rounded-xl" /> : <p className="text-4xl font-light tracking-tight drop-shadow-md" style={{ fontFamily: fonts?.display }}>{formatZar(totalDebt)}</p>}
+              </div>
             </div>
             <div className="h-12 w-12 rounded-[18px] bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
               <Landmark size={20} className="text-violet-300" />
@@ -207,8 +207,31 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
         {/* Loans List */}
         <div className="space-y-4">
           {loading ? (
-            <div className="text-center py-20 opacity-40 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">
-              Fetching Records...
+            <div className="space-y-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="w-full bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 animate-pulse">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-slate-100"></div>
+                      <div>
+                        <div className="h-2 w-16 bg-slate-100 rounded mb-1"></div>
+                        <div className="h-4 w-24 bg-slate-100 rounded"></div>
+                      </div>
+                    </div>
+                    <div className="h-6 w-20 bg-slate-100 rounded-full"></div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-100/80 flex justify-between items-end">
+                    <div>
+                      <div className="h-2 w-24 bg-slate-100 rounded mb-2"></div>
+                      <div className="h-8 w-32 bg-slate-100 rounded"></div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <div className="h-2 w-10 bg-slate-100 rounded mb-1"></div>
+                      <div className="h-4 w-16 bg-slate-100 rounded"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : loans.length === 0 ? (
             <div className="bg-white rounded-[36px] p-10 text-center border border-slate-100 shadow-sm mt-4 animate-in fade-in duration-700">
