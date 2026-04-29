@@ -70,9 +70,6 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
 
   // ── Dynamic info banner text based on payment method and strategy type ────
   const getInfoText = () => {
-    if (isAdditionalStrategy) {
-      return "This is an additional strategy. A recurring fee of R29/month will be charged for holding this strategy. This is shown in your fee breakdown below.";
-    }
     if (paymentMethod === "wallet") {
       return "Your wallet balance will be used to complete this investment instantly.";
     }
@@ -284,11 +281,9 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
                 </div>
               </div>
               {isAdditionalStrategy && (
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-1">
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs text-violet-700 font-medium">Strategy Fee (recurring)</p>
-                  </div>
-                  <p className="text-xs font-semibold text-violet-700">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-600">Strategy Fee (recurring)</p>
+                  <p className="text-xs font-semibold text-slate-900">
                     {formatCurrency(MONTHLY_STRATEGY_FEE, currency)}/month
                   </p>
                 </div>
