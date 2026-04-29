@@ -142,7 +142,7 @@ function addPageHeader(doc, logoB64, pageNum, totalPages) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(...WHITE);
-  doc.text("AfriVerse", MARGIN + 26, HEADER_H / 2 - 1);
+  doc.text("Mint", MARGIN + 26, HEADER_H / 2 - 1);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...MINT_LIGHT);
@@ -185,7 +185,7 @@ function addCeoSignature(doc, ceoSigB64, y) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(60, 50, 90);
-  doc.text("For and on behalf of AfriVerse Platforms (Pty) Ltd:", MARGIN, y);
+  doc.text("For and on behalf of Mint Platforms (Pty) Ltd:", MARGIN, y);
   y += 5;
   doc.text("Name: Lonwabo Damane", MARGIN, y);
   y += 4;
@@ -212,7 +212,7 @@ function addCeoSignature(doc, ceoSigB64, y) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(120, 110, 150);
-  doc.text("Chief Executive Officer — AfriVerse Platforms (Pty) Ltd", MARGIN, y);
+  doc.text("Chief Executive Officer — Mint Platforms (Pty) Ltd", MARGIN, y);
   return y + 5;
 }
 
@@ -352,7 +352,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
   doc.setTextColor(120, 110, 150);
   doc.text("Legal Guardian / Parent", MARGIN, y);
   y += 4;
-  doc.text(`Signed electronically via AfriVerse App — ${signedDateTime}`, MARGIN, y);
+  doc.text(`Signed electronically via Mint App — ${signedDateTime}`, MARGIN, y);
   y += 14;
 
   y = addCeoSignature(doc, ceoSigB64, y);
@@ -503,7 +503,7 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
   doc.setTextColor(120, 110, 150);
   doc.text("Legal Guardian / Parent", MARGIN, y);
   y += 4;
-  doc.text(`Signed electronically via AfriVerse App — ${signedDateTime}`, MARGIN, y);
+  doc.text(`Signed electronically via Mint App — ${signedDateTime}`, MARGIN, y);
   y += 14;
 
   y = addCeoSignature(doc, ceoSigB64, y);

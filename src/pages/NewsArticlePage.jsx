@@ -105,10 +105,10 @@ const NewsArticlePage = ({ onBack, articleId }) => {
         <article className="rounded-3xl bg-white p-6 shadow-md md:p-8">
           <div className="mb-6 flex items-center gap-3 border-b border-slate-100 pb-6">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-              <img src="/assets/afriverse-logo.svg" alt="AfriVerse" className="h-6 w-6" />
+              <img src="/assets/mint-logo.svg" alt="Mint" className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">AfriVerse News</p>
+              <p className="text-sm font-semibold text-slate-900">Mint News</p>
               <p className="text-xs text-slate-500">
                 {formattedDate} • {formattedTime}
               </p>
