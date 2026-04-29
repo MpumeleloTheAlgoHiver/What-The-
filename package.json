@@ -30,7 +30,7 @@
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.451.0",
     "node-cron": "^4.2.1",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "5.4.296",
     "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
