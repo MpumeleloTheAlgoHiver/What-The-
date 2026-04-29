@@ -1944,7 +1944,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
             <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 flex flex-col items-center px-6 pb-10 min-h-screen bg-white">
                <header className="px-5 pt-12 pb-8 flex items-center justify-between bg-[#160d2a] text-white w-full relative">
                   <div className="flex items-center gap-2">
-                     <img src="/assets/afriverse-logo.svg" alt="AfriVerse" className="h-5" />
+                     <img src="/assets/mint-logo.png" alt="Mint" className="h-5" />
                      <span className="text-[10px] font-black uppercase tracking-widest opacity-70">credit</span>
                   </div>
                </header>
@@ -2049,7 +2049,7 @@ const CreditApplyWizard = ({ onBack, onComplete, onTabChange, onOpenNotification
                      <div style={{ animation: "subtleBounce 3s ease-in-out infinite" }}>
                         <img
                            src="/assets/images/coinAlgoMoney.png"
-                           alt="AfriVerse"
+                           alt="Mint"
                            className="h-20 w-20 object-contain drop-shadow-2xl"
                         />
                      </div>

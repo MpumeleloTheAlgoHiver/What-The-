@@ -158,7 +158,7 @@ const PinSetupPage = ({ onNavigate, onBack }) => {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-3">
-          <img src="/assets/afriverse-logo.svg" alt="AfriVerse" className="h-6 w-auto" />
+          <img src="/assets/mint-logo.svg" alt="Mint" className="h-6 w-auto" />
           <span className="mint-brand text-lg font-semibold tracking-[0.12em]">MINT</span>
         </div>
         <div className="w-10" />

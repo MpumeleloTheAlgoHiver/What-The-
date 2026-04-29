@@ -154,7 +154,7 @@ const PinLockScreen = ({ onUnlock, onLogout, userEmail, userAvatar, userName }) 
     <div className="fixed inset-0 z-[9998] flex flex-col bg-slate-50">
       <div className="flex flex-1 flex-col items-center justify-center px-8">
         <div className="flex items-center gap-3 mb-8">
-          <img src="/assets/afriverse-logo.svg" alt="AfriVerse" className="h-6 w-auto" />
+          <img src="/assets/mint-logo.svg" alt="Mint" className="h-6 w-auto" />
           <span className="mint-brand text-lg font-semibold tracking-[0.12em]">MINT</span>
         </div>
 

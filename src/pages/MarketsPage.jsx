@@ -1846,11 +1846,11 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
                       <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                         <span className="inline-flex items-center gap-1.5">
                           <img
-                            src="/assets/afriverse-logo.svg"
-                            alt="AfriVerse"
+                            src="/assets/mint-logo.svg"
+                            alt="Mint"
                             className="h-3.5 w-3.5"
                           />
-                          <span className="font-medium">AfriVerse News</span>
+                          <span className="font-medium">Mint News</span>
                         </span>
                         <span>•</span>
                         <span>{timeText}</span>
