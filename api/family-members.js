@@ -127,7 +127,7 @@ async function checkKycComplete(db, userId) {
 export default async function handler(req, res) {
   const db = getClient(req);
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -410,6 +410,49 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       console.error("[family] POST error:", e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── PATCH /api/family-members/{id} ────────────────────────────────────────
+  if (req.method === "PATCH") {
+    const { user: authUser } = await authenticateUser(req);
+    if (!authUser) return res.status(401).json({ error: "Unauthorized" });
+
+    const memberId = req.url.split("/").pop();
+    if (!memberId || memberId === "family-members") {
+      return res.status(400).json({ error: "member_id required in URL" });
+    }
+
+    const updatePayload = req.body || {};
+
+    try {
+      const { data: member, error: fetchErr } = await db
+        .from("family_members")
+        .select("primary_user_id")
+        .eq("id", memberId)
+        .maybeSingle();
+
+      if (fetchErr || !member) {
+        return res.status(404).json({ error: "Family member not found" });
+      }
+
+      if (member.primary_user_id !== authUser.id) {
+        return res.status(403).json({ error: "Not authorized to update this member" });
+      }
+
+      const { data: updated, error: updateErr } = await db
+        .from("family_members")
+        .update(updatePayload)
+        .eq("id", memberId)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      return res.json(updated);
+    } catch (e) {
+      console.error("[family] PATCH error:", e.message);
       return res.status(500).json({ error: e.message });
     }
   }
