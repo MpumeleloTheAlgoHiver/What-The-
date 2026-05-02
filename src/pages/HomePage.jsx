@@ -22,9 +22,6 @@ import {
   Plus,
   Calendar,
   ChevronRight,
-  Handshake,
-  Gift,
-  Umbrella,
 } from "lucide-react";
 import { useProfile } from "../lib/useProfile";
 import NavigationPill from "../components/NavigationPill";
@@ -764,49 +761,6 @@ const HomePage = ({
             })}
           </div>
 
-          {/* Row 2 — service hub */}
-          <div className="grid grid-cols-4 gap-2 text-[11px] font-medium">
-            {[
-              { label: "Family", icon: Users, onClick: onOpenFamily, comingSoon: false },
-              { label: "Stokvel", icon: Handshake, onClick: null, comingSoon: true },
-              { label: "Insure", icon: Umbrella, onClick: INSURE_ENABLED ? onOpenInsure : null, comingSoon: !INSURE_ENABLED },
-              { label: "Rewards", icon: Gift, onClick: null, comingSoon: true },
-            ].map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={index}
-                  disabled={item.comingSoon}
-                  onClick={item.onClick}
-                  className={`relative flex flex-col items-center gap-2 rounded-2xl px-1 py-3 transition-all ${
-                    item.comingSoon
-                      ? "bg-slate-100/70 cursor-not-allowed border border-slate-200/60"
-                      : "bg-white shadow-md active:scale-95 active:shadow-sm"
-                  }`}
-                >
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                    item.comingSoon ? "bg-slate-200 text-slate-400" : "bg-violet-50 text-violet-700"
-                  }`}>
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className={`text-center leading-tight font-medium ${item.comingSoon ? "text-slate-400" : "text-slate-700"}`}>
-                    {item.label}
-                  </span>
-                  {item.comingSoon && (
-                    <span
-                      className="absolute bottom-1.5 left-1/2 -translate-x-1/2 inline-flex items-center px-1.5 py-px rounded-full text-[7px] font-bold uppercase tracking-wider text-white"
-                      style={{
-                        background: "linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%)",
-                        boxShadow: "0 1px 4px rgba(109,40,217,0.3)",
-                      }}
-                    >
-                      Soon
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
         </section>
 
         {onboardingChecked && outstandingActions.length > 0 ? (
