@@ -546,7 +546,7 @@ const SwipeableBalanceCard = ({
               .eq("strategy_id", asset.strategyId)
               .order("as_of_date", { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle();
 
             if (!error && data) {
               const pnlValue = data[columns.pnl] || 0;
@@ -603,7 +603,7 @@ const SwipeableBalanceCard = ({
                 .eq("strategy_id", strategyId)
                 .order("as_of_date", { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
 
               if (!err && row) {
                 const pnlValue = row[columns.pnl] || 0;
