@@ -126,7 +126,7 @@ const ManageSubscriptionsPage = ({ onBack }) => {
             {subscriptions.map((sub) => {
               const isActive = sub.status === "active";
               const isToggling = togglingId === sub.id;
-              const amountRands = (sub.amount_cents || 2900) / 100;
+              const amountRands = Number(sub.amount || 29);
 
               return (
                 <div
@@ -143,7 +143,7 @@ const ManageSubscriptionsPage = ({ onBack }) => {
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
-                          {sub.strategy_name || "Strategy Subscription"}
+                          {sub.plan || "Strategy Subscription"}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {formatCurrency(amountRands, "R")}/month
@@ -170,7 +170,7 @@ const ManageSubscriptionsPage = ({ onBack }) => {
                       <Calendar className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
                       <p className="text-xs text-slate-500">
                         {isActive
-                          ? `Next charge on ${formatDate(sub.next_billing_date)}`
+                          ? `Next charge on ${formatDate(sub.current_period_end)}`
                           : `Cancelled — no further charges`}
                       </p>
                     </div>

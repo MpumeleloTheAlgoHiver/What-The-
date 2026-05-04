@@ -518,24 +518,24 @@ export default async function handler(req, res) {
           const nextBillingDate = next.toISOString().split("T")[0];
 
           const { error: subError } = await db
-            .from("strategy_subscriptions")
+            .from("subscriptions")
             .upsert(
               {
                 user_id: userId,
-                strategy_id: strategyId,
-                strategy_name: name || "Strategy",
-                next_billing_date: nextBillingDate,
-                amount_cents: 2900,
+                plan: name || "Strategy",
+                amount: 29,
+                currency: "ZAR",
+                current_period_end: nextBillingDate,
                 status: "active",
                 updated_at: new Date().toISOString(),
               },
-              { onConflict: "user_id,strategy_id" }
+              { onConflict: "user_id,plan" }
             );
 
           if (subError) {
             console.warn("[record-investment] Strategy subscription upsert failed:", subError.message);
           } else {
-            console.log(`[record-investment] Subscription created for user ${userId}, strategy ${strategyId}. First billing: ${nextBillingDate}`);
+            console.log(`[record-investment] Subscription created for user ${userId}, strategy ${name}. First billing: ${nextBillingDate}`);
           }
         }
       } catch (subErr) {

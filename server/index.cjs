@@ -640,10 +640,10 @@ cron.schedule("0 22 * * *", async () => {
   const today = new Date().toISOString().split("T")[0];
 
   const { data: dueSubs, error: fetchErr } = await db
-    .from("strategy_subscriptions")
-    .select("id, user_id, strategy_id, strategy_name, amount_cents, next_billing_date")
+    .from("subscriptions")
+    .select("id, user_id, plan, amount, current_period_end")
     .eq("status", "active")
-    .lte("next_billing_date", today);
+    .lte("current_period_end", today);
 
   if (fetchErr) { console.error("[strategy-sub-cron] Fetch error:", fetchErr.message); return; }
   if (!dueSubs || dueSubs.length === 0) { console.log("[strategy-sub-cron] No subscriptions due today."); return; }
@@ -652,7 +652,7 @@ cron.schedule("0 22 * * *", async () => {
 
   for (const sub of dueSubs) {
     try {
-      const amountRands = sub.amount_cents / 100;
+      const amountRands = Number(sub.amount || 29);
 
       // Deduct from wallet (allow negative balance)
       const { data: wallet } = await db.from("wallets").select("balance").eq("user_id", sub.user_id).maybeSingle();
@@ -665,9 +665,9 @@ cron.schedule("0 22 * * *", async () => {
       await db.from("transactions").insert({
         user_id: sub.user_id,
         direction: "debit",
-        name: `Strategy Subscription Fee: ${sub.strategy_name || "Strategy"}`,
-        description: `Monthly R29 subscription fee for ${sub.strategy_name || "strategy"}`,
-        amount: sub.amount_cents,
+        name: `Strategy Subscription Fee: ${sub.plan || "Strategy"}`,
+        description: `Monthly R${amountRands} subscription fee for ${sub.plan || "strategy"}`,
+        amount: Math.round(amountRands * 100),
         store_reference: `sub-${sub.id}-${today}`,
         currency: "ZAR",
         status: "posted",
@@ -675,16 +675,16 @@ cron.schedule("0 22 * * *", async () => {
         created_at: now,
       });
 
-      // Advance next_billing_date by one month
-      const billing = new Date(sub.next_billing_date);
+      // Advance current_period_end by one month
+      const billing = new Date(sub.current_period_end);
       const day = billing.getDate();
       billing.setMonth(billing.getMonth() + 1);
       if (billing.getDate() < day) billing.setDate(0);
       const nextDate = billing.toISOString().split("T")[0];
 
-      await db.from("strategy_subscriptions").update({ next_billing_date: nextDate, updated_at: now }).eq("id", sub.id);
+      await db.from("subscriptions").update({ current_period_end: nextDate, updated_at: now }).eq("id", sub.id);
 
-      console.log(`[strategy-sub-cron] Billed R${amountRands} for user ${sub.user_id} (${sub.strategy_name}). New balance: R${newBalance}. Next billing: ${nextDate}`);
+      console.log(`[strategy-sub-cron] Billed R${amountRands} for user ${sub.user_id} (${sub.plan}). New balance: R${newBalance}. Next billing: ${nextDate}`);
     } catch (err) {
       console.error(`[strategy-sub-cron] Error processing sub ${sub.id}:`, err.message);
     }
@@ -2806,8 +2806,8 @@ app.get("/api/user/strategy-subscriptions", async (req, res) => {
     const client = await pgPool.connect();
     try {
       const result = await client.query(
-        `SELECT id, strategy_id, strategy_name, next_billing_date, amount_cents, status, created_at
-         FROM strategy_subscriptions
+        `SELECT id, user_id, plan, amount, currency, current_period_end, status, created_at
+         FROM subscriptions
          WHERE user_id = $1
          ORDER BY created_at DESC`,
         [user.id]
@@ -2837,7 +2837,7 @@ app.patch("/api/user/strategy-subscriptions/:id", async (req, res) => {
     const client = await pgPool.connect();
     try {
       const result = await client.query(
-        `UPDATE strategy_subscriptions
+        `UPDATE subscriptions
          SET status = $1, updated_at = NOW()
          WHERE id = $2 AND user_id = $3
          RETURNING id, status`,

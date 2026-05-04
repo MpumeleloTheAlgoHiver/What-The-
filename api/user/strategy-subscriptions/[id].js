@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     const db = supabaseAdmin || supabase;
 
     const { data, error } = await db
-      .from("strategy_subscriptions")
+      .from("subscriptions")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", id)
       .eq("user_id", user.id)

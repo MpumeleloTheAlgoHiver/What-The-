@@ -23,8 +23,8 @@ export default async function handler(req, res) {
     const db = supabaseAdmin || supabase;
 
     const { data: subscriptions, error } = await db
-      .from("strategy_subscriptions")
-      .select("id, strategy_id, strategy_name, next_billing_date, amount_cents, status, created_at")
+      .from("subscriptions")
+      .select("id, user_id, plan, amount, currency, current_period_end, status, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
