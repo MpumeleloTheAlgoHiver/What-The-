@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ArrowUpRight, ArrowDownLeft, X, TrendingUp, TrendingDown,
-  ShieldCheck, Baby, Wallet, BarChart3, ChevronRight,
+  Wallet, BarChart3, ChevronRight,
   RefreshCw, Search, Star, AlertCircle, Check, ClipboardList,
   Target, Users, BookOpen, LayoutGrid, ArrowDownToLine,
 } from "lucide-react";
@@ -10,6 +10,9 @@ import { useProfile } from "../lib/useProfile";
 import { supabase } from "../lib/supabase";
 import MinorProofOfAddressDeclaration from "../components/MinorProofOfAddressDeclaration";
 import ChildResponsibilityAgreement from "../components/ChildResponsibilityAgreement";
+import SwipeableBalanceCard from "../components/SwipeableBalanceCard";
+
+const CARD_VISIBILITY_KEY = "mintBalanceVisible";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -45,20 +48,6 @@ const item = {
   hidden: { opacity: 0, y: 16, scale: 0.98 },
   show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 340, damping: 28 } },
 };
-
-// ─── Avatar ──────────────────────────────────────────────────────────────────
-
-function Avatar({ name, gradient, size = "h-14 w-14", text = "text-xl" }) {
-  const initial = (name || "?")[0].toUpperCase();
-  return (
-    <div
-      className={`${size} rounded-2xl flex items-center justify-center font-bold text-white flex-shrink-0`}
-      style={{ background: gradient, aspectRatio: "1" }}
-    >
-      <span className={text}>{initial}</span>
-    </div>
-  );
-}
 
 // ─── Transfer Modal (bottom-sheet) ───────────────────────────────────────────
 
@@ -962,6 +951,7 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
 export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const { profile } = useProfile();
   const isMounted = useRef(true);
+  const [userId, setUserId] = useState(null);
   const [child, setChild] = useState(initialChild);
   const [holdings, setHoldings] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -973,6 +963,12 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const [showInvest, setShowInvest] = useState(false);
   const [showLearn, setShowLearn] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [isCardVisible] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem(CARD_VISIBILITY_KEY) !== "false";
+    }
+    return true;
+  });
 
   const childName = [child?.first_name, child?.last_name].filter(Boolean).join(" ") || "Child";
   const age = getAge(child?.date_of_birth);
@@ -993,6 +989,15 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
     !child?.signed_agreement_url && "responsibility agreement",
   ].filter(Boolean);
   const isProfileIncomplete = !child?.address_completed;
+
+  useEffect(() => {
+    const getUser = async () => {
+      if (!supabase) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) setUserId(session.user.id);
+    };
+    getUser();
+  }, []);
 
   useEffect(() => {
     isMounted.current = true;
@@ -1100,16 +1105,6 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const pnlPct = totalPortfolio > 0 ? ((totalPnl / Math.max(totalPortfolio - totalPnl, 1)) * 100) : 0;
   const isPortUp = totalPnl >= 0;
 
-  // Avatar gradient based on first letter hash
-  const gradients = [
-    "linear-gradient(135deg,#7c3aed,#5b21b6)",
-    "linear-gradient(135deg,#a855f7,#7c3aed)",
-    "linear-gradient(135deg,#8b5cf6,#6366f1)",
-    "linear-gradient(135deg,#a78bfa,#7c3aed)",
-    "linear-gradient(135deg,#9333ea,#7c3aed)",
-  ];
-  const avatarGradient = gradients[(childName.charCodeAt(0) || 0) % gradients.length];
-
   return (
     <div
       className="min-h-screen pb-[env(safe-area-inset-bottom)]"
@@ -1134,34 +1129,17 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             <div className="flex-1" />
           </div>
 
-          {/* Child profile card */}
-          <div className="flex flex-col items-center mt-6">
-            <Avatar name={childName} gradient={avatarGradient} size="h-24 w-24" text="text-4xl" />
-            <h1 className="text-2xl font-bold text-slate-800 mt-4 tracking-tight">{childName}</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[11px] font-bold tracking-wide bg-white/90 backdrop-blur-md text-slate-700 border border-slate-200 shadow-sm">
-                <Baby className="h-3.5 w-3.5" />
-                {age !== null ? `${age} yr${age !== 1 ? "s" : ""} old` : "Child"}
-              </span>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold tracking-wide border ${
-                  childKycStatus === "completed"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : childKycStatus === "rejected"
-                      ? "bg-red-50 text-red-700 border-red-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${childKycStatus === "pending" ? "animate-pulse" : ""}`} style={{ backgroundColor: "currentColor" }} />
-                {childKycLabel}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-2">
-              <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-              <span className="text-[11px] text-slate-600">
-                Managed by {parentName}
-                {parentMintNumber ? ` · #${parentMintNumber}` : ""}
-              </span>
+          {/* Use the same landing-page card design and graph as HomePage */}
+          <div className="relative select-none mt-6">
+            <div className="relative w-full touch-pan-y h-auto">
+              <div className="relative h-auto rounded-[28px] border border-white/10">
+                <SwipeableBalanceCard
+                  userId={userId}
+                  isBackFacing
+                  forceVisible={isCardVisible}
+                  mintNumber={profile?.mintNumber}
+                />
+              </div>
             </div>
           </div>
         </div>
