@@ -288,6 +288,11 @@ const SwipeableBalanceCard = ({
           0,
         );
 
+        console.log("[SwipeableBalanceCard] Loaded holdings:", {
+          count: enrichedHoldings.length,
+          totalMarketValue: mValue,
+          holdings: enrichedHoldings
+        });
 
         setDbData({
           holdings: enrichedHoldings,
