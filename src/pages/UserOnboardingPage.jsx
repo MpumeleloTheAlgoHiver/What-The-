@@ -171,6 +171,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
   const [addressDone, setAddressDone] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const [termsDone, setTermsDone] = useState(false);
+  const [agreementSignedDone, setAgreementSignedDone] = useState(false);
   const [authStatus, setAuthStatus] = useState({
     isChecked: false,
     isAuthenticated: false,
@@ -706,6 +707,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
       console.error("Failed to update KYC status:", err);
     }
 
+    setAgreementSignedDone(true);
     if (onComplete) onComplete();
   };
 
