@@ -10,6 +10,9 @@ import { useProfile } from "../lib/useProfile";
 import { supabase } from "../lib/supabase";
 import MinorProofOfAddressDeclaration from "../components/MinorProofOfAddressDeclaration";
 import ChildResponsibilityAgreement from "../components/ChildResponsibilityAgreement";
+import SwipeableBalanceCard from "../components/SwipeableBalanceCard";
+
+const CARD_VISIBILITY_KEY = "mintBalanceVisible";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -948,6 +951,7 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
 export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const { profile } = useProfile();
   const isMounted = useRef(true);
+  const [userId, setUserId] = useState(null);
   const [child, setChild] = useState(initialChild);
   const [holdings, setHoldings] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -959,6 +963,12 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const [showInvest, setShowInvest] = useState(false);
   const [showLearn, setShowLearn] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [isCardVisible] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem(CARD_VISIBILITY_KEY) !== "false";
+    }
+    return true;
+  });
 
   const childName = [child?.first_name, child?.last_name].filter(Boolean).join(" ") || "Child";
   const age = getAge(child?.date_of_birth);
@@ -979,6 +989,15 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
     !child?.signed_agreement_url && "responsibility agreement",
   ].filter(Boolean);
   const isProfileIncomplete = !child?.address_completed;
+
+  useEffect(() => {
+    const getUser = async () => {
+      if (!supabase) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) setUserId(session.user.id);
+    };
+    getUser();
+  }, []);
 
   useEffect(() => {
     isMounted.current = true;
@@ -1110,24 +1129,70 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             <div className="flex-1" />
           </div>
 
-          {/* Child-only hero card */}
+          {/* Use the same landing-page card design and graph as HomePage */}
+          <div className="relative select-none mt-6">
+            <div className="relative w-full touch-pan-y h-auto">
+              <div className="relative h-auto rounded-[28px] border border-white/10">
+                <SwipeableBalanceCard
+                  userId={userId}
+                  isBackFacing
+                  forceVisible={isCardVisible}
+                  mintNumber={profile?.mintNumber}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <div className="mx-auto w-full max-w-sm px-4 pb-12 md:max-w-md">
+        <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
+
+          {/* ── Incomplete profile banner ── */}
+          {isProfileIncomplete && (
+            <motion.div variants={item}>
+              <button
+                onClick={() => setShowCompleteModal(true)}
+                className="w-full flex items-center gap-3 rounded-2xl px-4 py-4 text-left transition active:scale-[0.98]"
+                style={{ background: "linear-gradient(135deg,#fef3c7,#fef9c3)", border: "1px solid #fde68a" }}
+              >
+                <div className="h-9 w-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="h-4.5 w-4.5 text-amber-600" style={{ height: "1.125rem", width: "1.125rem" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-amber-800">Complete {child?.first_name}'s profile</p>
+                  <p className="text-xs text-amber-700 mt-0.5 truncate">
+                    Missing: {missingItems.join(", ")}
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── Unified Wallet + Portfolio Card ── */}
           <motion.div
             variants={item}
-            className="rounded-3xl relative overflow-hidden mt-6"
+            className="rounded-3xl relative overflow-hidden"
             style={{
               background: "linear-gradient(135deg, #3b1d72 0%, #5b21b6 40%, #7c3aed 75%, #9d5cf6 100%)",
               boxShadow: "0 12px 40px rgba(91,33,182,0.42), 0 2px 8px rgba(91,33,182,0.2)",
             }}
           >
+            {/* Subtle glare orbs */}
             <div className="pointer-events-none absolute -top-10 -right-10 h-44 w-44 rounded-full" style={{ background: "rgba(255,255,255,0.07)" }} />
             <div className="pointer-events-none absolute -bottom-8 left-8 h-28 w-28 rounded-full" style={{ background: "rgba(255,255,255,0.05)" }} />
 
             <div className="relative p-6">
+
+              {/* Label row */}
               <div className="mb-1.5 flex items-center justify-between">
                 <p className="text-[11px] font-medium text-white/70 uppercase tracking-[0.07em]">Available Balance</p>
                 <span className="text-[10px] font-medium text-white/55 uppercase tracking-[0.07em]">{child?.first_name}'s Wallet</span>
               </div>
 
+              {/* Wallet balance */}
               <p
                 className="mb-6 text-[34px] font-extrabold text-white"
                 style={{ letterSpacing: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -1135,6 +1200,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
                 {fmt(childBalance)}
               </p>
 
+              {/* Portfolio row */}
               <div className="grid grid-cols-2 gap-2.5">
                 {[
                   { label: "Wallet", value: fmt(childBalance), detail: childKycLabel },
@@ -1164,34 +1230,6 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
               </div>
             </div>
           </motion.div>
-        </div>
-      </div>
-
-      {/* ── Content ── */}
-      <div className="mx-auto w-full max-w-sm px-4 pb-12 md:max-w-md">
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
-
-          {/* ── Incomplete profile banner ── */}
-          {isProfileIncomplete && (
-            <motion.div variants={item}>
-              <button
-                onClick={() => setShowCompleteModal(true)}
-                className="w-full flex items-center gap-3 rounded-2xl px-4 py-4 text-left transition active:scale-[0.98]"
-                style={{ background: "linear-gradient(135deg,#fef3c7,#fef9c3)", border: "1px solid #fde68a" }}
-              >
-                <div className="h-9 w-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="h-4.5 w-4.5 text-amber-600" style={{ height: "1.125rem", width: "1.125rem" }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-amber-800">Complete {child?.first_name}'s profile</p>
-                  <p className="text-xs text-amber-700 mt-0.5 truncate">
-                    Missing: {missingItems.join(", ")}
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-amber-600 flex-shrink-0" />
-              </button>
-            </motion.div>
-          )}
 
           {/* Quick actions */}
           <motion.div variants={container} className="grid grid-cols-5 gap-2">
