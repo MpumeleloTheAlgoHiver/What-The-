@@ -311,6 +311,42 @@ export default async function handler(req, res) {
     }
   }
 
+  // Investment activity — platform engagement signal for AlgoHive behavioural factor
+  if (supabase && userId) {
+    try {
+      const dbClient = accessToken
+        ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            global: { headers: { Authorization: `Bearer ${accessToken}` } }
+          })
+        : supabase;
+
+      const [stockRes, strategyRes] = await Promise.all([
+        dbClient
+          .from('stock_holdings_c')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('Status', 'active')
+          .limit(1)
+          .maybeSingle(),
+        dbClient
+          .from('stock_holdings_c')
+          .select('id')
+          .eq('user_id', userId)
+          .not('strategy_id', 'is', null)
+          .eq('Status', 'active')
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      normalizedOverrides.algohive_has_stock_holdings = Boolean(stockRes.data?.id);
+      normalizedOverrides.algohive_has_strategy_investments = Boolean(strategyRes.data?.id);
+    } catch (investError) {
+      console.warn('Investment activity lookup failed:', investError?.message || investError);
+      normalizedOverrides.algohive_has_stock_holdings = false;
+      normalizedOverrides.algohive_has_strategy_investments = false;
+    }
+  }
+
   // Enrich from onboarding if employment fields missing
   if (supabase && userId) {
     try {
