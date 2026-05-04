@@ -913,27 +913,10 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
               </div>
             </div>
           ) : step === 2 ? (
-            <div className="w-full max-w-xl mx-auto">
-              <div className="text-center mb-8 animate-fade-in delay-1">
-                <p className="text-xs uppercase tracking-[0.2em] mb-2" style={{ color: "hsl(270 20% 55%)" }}>
-                  Step 2 of 11
-                </p>
-                <div className="hero-icon">
-                  <CheckCircleIcon width={48} height={48} />
-                </div>
-                <h2 className="text-3xl font-light tracking-tight mb-2" style={{ color: "hsl(270 30% 25%)" }}>
-                  KYC Verification
-                </h2>
-                <p className="text-sm" style={{ color: "hsl(270 20% 50%)" }}>
-                  Verifying your identity...
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center">
-                  <div className="animate-spin h-8 w-8 border-4 border-violet-200 border-t-violet-600 rounded-full"></div>
-                </div>
-              </div>
-            </div>
+            <SumsubVerification onVerified={() => {
+              setKycVerificationDone(true);
+              goToStep(getNextIncompleteStep(2));
+            }} />
           ) : step === 3 ? (
             <div className="w-full max-w-xl mx-auto">
               <div className="text-center mb-8 animate-fade-in delay-1">
