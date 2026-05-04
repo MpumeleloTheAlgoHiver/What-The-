@@ -2823,9 +2823,9 @@ app.post("/api/record-investment", async (req, res) => {
     console.log("[record-investment] Parsed fields - securityId:", securityId, "symbol:", symbol, "name:", name, "amount:", amount, "baseAmount:", baseAmount, "strategyId:", strategyId, "paymentReference:", paymentReference, "shareCount:", shareCount, "paymentMethod:", paymentMethod);
     console.log("[record-investment] Fees breakdown:", feesBreakdown);
 
-    if (!securityId || !amount || !paymentReference) {
-      console.log("[record-investment] MISSING FIELDS - securityId:", !!securityId, "amount:", !!amount, "paymentReference:", !!paymentReference);
-      return res.status(400).json({ success: false, error: "Missing required fields: securityId, amount, paymentReference" });
+    if ((!securityId && !strategyId) || !amount || Number(amount) <= 0 || !paymentReference) {
+      console.log("[record-investment] MISSING FIELDS - securityId:", !!securityId, "strategyId:", !!strategyId, "amount:", !!amount, "paymentReference:", !!paymentReference);
+      return res.status(400).json({ success: false, error: "Missing required fields: securityId or strategyId, amount, paymentReference" });
     }
 
     let payData = { amount: Math.round(amount * 100) };

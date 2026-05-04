@@ -1,0 +1,368 @@
+ 
+      /////////////////////
+   ///////////////////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////        Curious and driven?
+  ///////////////@@@@@@@///////        Work with us!
+  ///////////////@@@@@@@///////
+  ///////////////@@@@@@@///////        https://join.replit.com/hack.with.us
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@#//////////////
+   ///////////////////////////
+      /////////////////////
+      
+ Download the Apollo DevTools for a better development experience: https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm
+ [LaunchDarkly] LaunchDarkly client initialized
+/@T645/mint-development:1 Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+ Unrecognized feature: 'ambient-light-sensor'.
+ Unrecognized feature: 'battery'.
+ Unrecognized feature: 'execution-while-not-rendered'.
+ Unrecognized feature: 'execution-while-out-of-viewport'.
+ Unrecognized feature: 'layout-animations'.
+ Unrecognized feature: 'legacy-image-formats'.
+ Unrecognized feature: 'navigation-override'.
+ Unrecognized feature: 'oversized-images'.
+ Unrecognized feature: 'publickey-credentials'.
+ Unrecognized feature: 'speaker-selection'.
+ Unrecognized feature: 'unoptimized-images'.
+ Unrecognized feature: 'unsized-media'.
+ Unrecognized feature: 'pointer-lock'.
+ Allow attribute will take precedence over 'allowfullscreen'.
+ Allow attribute will take precedence over 'allowpaymentrequest'.
+ Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev') does not match the recipient window's origin ('https://replit.com').
+ Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev') does not match the recipient window's origin ('https://replit.com').
+dotdevproxy.janeway.repl.co/__reachability:1  Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID
+dotdevproxy.janeway.repl.co/__reachability:1  Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID
+dotdevproxy.janeway.repl.co/__reachability:1  Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID
+dotdevproxy.picard.repl.co/__reachability:1  Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID
+dotdevproxy.picard.repl.co/__reachability:1  Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID
+dotdevproxy.picard.repl.co/__reachability:1  Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID
+gravatar.com/avatar/c07d8479b1eecea04459d341083bf48071f55461186d8debabc3cbce89baf6f2?d=404:1  Failed to load resource: the server responded with a status of 404 ()
+ Haven't heard from the server in a while, resetting connection...
+ Haven't heard from the server in a while, resetting connection...
+ Haven't heard from the server in a while, resetting connection...
+ Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev') does not match the recipient window's origin ('https://replit.com').
+ Missing field 'thinkingEnabled' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'enableAutomatedTesting' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'enableAutoCheckpointing' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'autoApprovePlan' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'webSearchEnabled' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'imageGenerationEnabled' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'autonomyLevel' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Missing field 'maxAutonomyEnabled' while writing result {
+  "__typename": "AgentSettings",
+  "chatMode": "general",
+  "modelProfile": "MODEL_PROFILE_ADVANCED"
+}
+ Haven't heard from the server in a while, resetting connection...
+ Haven't heard from the server in a while, resetting connection...
+ Haven't heard from the server in a while, resetting connection...
+ Haven't heard from the server in a while, resetting connection...
+ Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev') does not match the recipient window's origin ('https://replit.com').
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'ambient-light-sensor'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'battery'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'execution-while-not-rendered'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'execution-while-out-of-viewport'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'layout-animations'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'legacy-image-formats'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'navigation-override'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'oversized-images'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'publickey-credentials'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'speaker-selection'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'unoptimized-images'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Unrecognized feature: 'unsized-media'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Allow attribute will take precedence over 'allowfullscreen'.
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Allow attribute will take precedence over 'allowpaymentrequest'.
+ [realtime-prices] Setting up singleton subscription
+ Setting up SINGLETON notifications subscription
+ [realtime-prices] Subscription status: SUBSCRIBED
+ Notifications singleton status: SUBSCRIBED
+ KYC status check: stored="verified" current="verified"
+ [useOnboardingStatus] Total Onboarding Status: COMPLETE ✅ Object
+ Setting up SINGLETON real-time subscription: required-actions-singleton
+ Singleton subscription status: SUBSCRIBED
+ Polling Sumsub status...
+injected.js:37 KYC status check: stored="verified" current="verified"
+0f_8qqb~i-af8.js:21 Cache data may be lost when replacing the authorizations field of a Customer object.
+
+This could cause additional (usually avoidable) network requests to fetch data that were otherwise cached.
+
+To address this problem (which is not a bug in Apollo Client), either ensure all objects of type CustomerAuthorizations have an ID or a custom merge function, or define a custom merge function for the Customer.authorizations field, so InMemoryCache can safely merge these objects:
+
+  existing: {"__typename":"CustomerAuthorizations","createWorkspace":{"__typename":"CustomerAuthorization","isAuthorized":true,"code":"authorized"}}
+  incoming: {"__typename":"CustomerAuthorizations","viewSubscription":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to view the subscription."},"viewSeats":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to view seats."},"viewUsage":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to view usage."},"editUsageLimit":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to edit the usage limit."},"editSettings":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to edit the settings."},"enableScim":{"__typename":"CustomerAuthorization","isAuthorized":false,"message":"This feature requires an enterprise plan. Contact the sales team to enable SCIM provisioning."},"enableSaml":{"__typename":"CustomerAuthorization","isAuthorized":false,"message":"This feature requires an enterprise plan. Contact the sales team to enable SAML SSO."}}
+
+For more information about these options, please refer to the documentation:
+
+  * Ensuring entity objects have IDs: https://go.apollo.dev/c/generating-unique-identifiers
+  * Defining custom merge functions: https://go.apollo.dev/c/merging-non-normalized-objects
+
+(anonymous) @ 0f_8qqb~i-af8.js:21
+injected.js:37 Polling Sumsub status...
+injected.js:37 KYC status check: stored="verified" current="verified"
+injected.js:37 Polling Sumsub status...
+injected.js:37 KYC status check: stored="verified" current="verified"
+injected.js:37 [Chart] TimeFrame: YTD, Base: 100.31, End: 102.38, Return: 2.06%
+injected.js:37 [realtime-prices] Tearing down subscription
+injected.js:37 [realtime-prices] Subscription status: CLOSED
+injected.js:37 🔍 Fetching latest intraday data from stock_intraday_c...
+injected.js:37 🔍 Fetching strategies with metrics from Supabase...
+injected.js:37 🔍 Fetching public strategies from Supabase...
+injected.js:37 🔍 Fetching news articles from News_articles table...
+injected.js:37 ✅ News articles fetched successfully!
+injected.js:37 📊 Total count in DB: 3896
+injected.js:37 📰 Articles returned: 50
+injected.js:37 Sample article: Object
+injected.js:37 ✅ Fetched 11 strategies with metrics
+injected.js:37 ✅ Fetched strategies: Array(11)
+injected.js:37 ✅ Fetched 7 public strategies with dynamic metrics
+injected.js:37 ✅ Fetched public strategies: Array(7)
+injected.js:37 ✅ Fetched 129 securities with intraday metrics
+injected.js:37 📊 Fetched securities: Array(129)
+injected.js:37 📊 Securities with prices: 129
+injected.js:37 📊 Securities without prices: 0
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 Opening strategy: Object
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 [Chart] Data appears reversed by value comparison, flipping
+injected.js:37 [Chart] TimeFrame: YTD, Base: -2.07, End: -0.34, Return: -83.57%
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(192) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+ Warning: TT: undefined function: 21
+warn @ pdf.worker.min.mjs:25
+ Warning: TT: undefined function: 21
+warn @ pdf.worker.min.mjs:25
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(192) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 [Chart] TimeFrame: YTD, Base: 100.31, End: 102.38, Return: 2.06%
+injected.js:37 🔍 Fetching latest intraday data from stock_intraday_c...
+injected.js:37 🔍 Fetching strategies with metrics from Supabase...
+injected.js:37 🔍 Fetching public strategies from Supabase...
+injected.js:37 🔍 Fetching news articles from News_articles table...
+injected.js:37 ✅ News articles fetched successfully!
+injected.js:37 📊 Total count in DB: 3896
+injected.js:37 📰 Articles returned: 50
+injected.js:37 Sample article: Object
+injected.js:37 ✅ Fetched 7 public strategies with dynamic metrics
+injected.js:37 ✅ Fetched public strategies: Array(7)
+injected.js:37 ✅ Fetched 11 strategies with metrics
+injected.js:37 ✅ Fetched strategies: Array(11)
+injected.js:37 ✅ Fetched 129 securities with intraday metrics
+injected.js:37 📊 Fetched securities: Array(129)
+injected.js:37 📊 Securities with prices: 129
+injected.js:37 📊 Securities without prices: 0
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 Opening strategy: Object
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 [Chart] Data appears reversed by value comparison, flipping
+injected.js:37 [Chart] TimeFrame: YTD, Base: -2.07, End: -0.34, Return: -83.57%
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+injected.js:37 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(192) or use aspect(undefined) to control the
+       height and width.
+(anonymous) @ injected.js:37
+ Warning: TT: undefined function: 21
+warn @ pdf.worker.min.mjs:25
+ Warning: TT: undefined function: 21
+warn @ pdf.worker.min.mjs:25
+injected.js:37 Recording investment with body: Object
+d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev/api/record-investment:1  Failed to load resource: the server responded with a status of 400 (Bad Request)
+injected.js:37 Record attempt 1/5 failed (400): Object
+(anonymous) @ injected.js:37
+injected.js:37 Wallet payment API response: Object
+injected.js:37 Wallet payment error: Error: Missing required fields: securityId, amount, paymentReference
+    at handleWalletConfirm (PaymentPage.jsx:279:15)
+(anonymous) @ injected.js:37
+d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev/node_modules/pdfjs-dist/build/pdf.worker.min.mjs:25 Warning: TT: undefined function: 21
+warn @ d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev/node_modules/pdfjs-dist/build/pdf.worker.min.mjs:25
+d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev/node_modules/pdfjs-dist/build/pdf.worker.min.mjs:25 Warning: TT: undefined function: 21
+warn @ d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev/node_modules/pdfjs-dist/build/pdf.worker.min.mjs:25
+injected.js:37 Recording investment with body: {symbol: 'Blended Focus', name: 'Blended Focus', amount: 6566.708340000001, baseAmount: 5291, paymentReference: 'WALLET-1777883420603', …}
+injected.js:214  POST https://d174c46f-4968-45d5-b39f-b239394d068f-00-u82e7d2r0jd0.picard.replit.dev/api/record-investment 400 (Bad Request)
+apply @ injected.js:214
+(anonymous) @ PaymentPage.jsx:158
+await in (anonymous)
+(anonymous) @ PaymentPage.jsx:271
+callCallback2 @ chunk-IEWVK4NL.js?v=3eb27bea:3680
+invokeGuardedCallbackDev @ chunk-IEWVK4NL.js?v=3eb27bea:3705
+invokeGuardedCallback @ chunk-IEWVK4NL.js?v=3eb27bea:3739
+invokeGuardedCallbackAndCatchFirstError @ chunk-IEWVK4NL.js?v=3eb27bea:3742
+executeDispatch @ chunk-IEWVK4NL.js?v=3eb27bea:7046
+processDispatchQueueItemsInOrder @ chunk-IEWVK4NL.js?v=3eb27bea:7066
+processDispatchQueue @ chunk-IEWVK4NL.js?v=3eb27bea:7075
+dispatchEventsForPlugins @ chunk-IEWVK4NL.js?v=3eb27bea:7083
+(anonymous) @ chunk-IEWVK4NL.js?v=3eb27bea:7206
+batchedUpdates$1 @ chunk-IEWVK4NL.js?v=3eb27bea:18966
+batchedUpdates @ chunk-IEWVK4NL.js?v=3eb27bea:3585
+dispatchEventForPluginEventSystem @ chunk-IEWVK4NL.js?v=3eb27bea:7205
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-IEWVK4NL.js?v=3eb27bea:5484
+dispatchEvent @ chunk-IEWVK4NL.js?v=3eb27bea:5478
+dispatchDiscreteEvent @ chunk-IEWVK4NL.js?v=3eb27bea:5455
+injected.js:37 Record attempt 1/5 failed (400): {success: false, error: 'Missing required fields: securityId, amount, paymentReference'}
+(anonymous) @ injected.js:37
+(anonymous) @ PaymentPage.jsx:170
+await in (anonymous)
+(anonymous) @ PaymentPage.jsx:271
+callCallback2 @ chunk-IEWVK4NL.js?v=3eb27bea:3680
+invokeGuardedCallbackDev @ chunk-IEWVK4NL.js?v=3eb27bea:3705
+invokeGuardedCallback @ chunk-IEWVK4NL.js?v=3eb27bea:3739
+invokeGuardedCallbackAndCatchFirstError @ chunk-IEWVK4NL.js?v=3eb27bea:3742
+executeDispatch @ chunk-IEWVK4NL.js?v=3eb27bea:7046
+processDispatchQueueItemsInOrder @ chunk-IEWVK4NL.js?v=3eb27bea:7066
+processDispatchQueue @ chunk-IEWVK4NL.js?v=3eb27bea:7075
+dispatchEventsForPlugins @ chunk-IEWVK4NL.js?v=3eb27bea:7083
+(anonymous) @ chunk-IEWVK4NL.js?v=3eb27bea:7206
+batchedUpdates$1 @ chunk-IEWVK4NL.js?v=3eb27bea:18966
+batchedUpdates @ chunk-IEWVK4NL.js?v=3eb27bea:3585
+dispatchEventForPluginEventSystem @ chunk-IEWVK4NL.js?v=3eb27bea:7205
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-IEWVK4NL.js?v=3eb27bea:5484
+dispatchEvent @ chunk-IEWVK4NL.js?v=3eb27bea:5478
+dispatchDiscreteEvent @ chunk-IEWVK4NL.js?v=3eb27bea:5455
+injected.js:37 Wallet payment API response: {success: false, error: 'Missing required fields: securityId, amount, paymentReference'}
+injected.js:37 Wallet payment error: Error: Missing required fields: securityId, amount, paymentReference
+    at handleWalletConfirm (PaymentPage.jsx:279:15)
+(anonymous) @ injected.js:37
+(anonymous) @ PaymentPage.jsx:293
+await in (anonymous)
+callCallback2 @ chunk-IEWVK4NL.js?v=3eb27bea:3680
+invokeGuardedCallbackDev @ chunk-IEWVK4NL.js?v=3eb27bea:3705
+invokeGuardedCallback @ chunk-IEWVK4NL.js?v=3eb27bea:3739
+invokeGuardedCallbackAndCatchFirstError @ chunk-IEWVK4NL.js?v=3eb27bea:3742
+executeDispatch @ chunk-IEWVK4NL.js?v=3eb27bea:7046
+processDispatchQueueItemsInOrder @ chunk-IEWVK4NL.js?v=3eb27bea:7066
+processDispatchQueue @ chunk-IEWVK4NL.js?v=3eb27bea:7075
+dispatchEventsForPlugins @ chunk-IEWVK4NL.js?v=3eb27bea:7083
+(anonymous) @ chunk-IEWVK4NL.js?v=3eb27bea:7206
+batchedUpdates$1 @ chunk-IEWVK4NL.js?v=3eb27bea:18966
+batchedUpdates @ chunk-IEWVK4NL.js?v=3eb27bea:3585
+dispatchEventForPluginEventSystem @ chunk-IEWVK4NL.js?v=3eb27bea:7205
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-IEWVK4NL.js?v=3eb27bea:5484
+dispatchEvent @ chunk-IEWVK4NL.js?v=3eb27bea:5478
+dispatchDiscreteEvent @ chunk-IEWVK4NL.js?v=3eb27bea:5455
