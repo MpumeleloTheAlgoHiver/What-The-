@@ -635,30 +635,19 @@ runStrategySubscriptionMigration(pgPool, supabaseAdmin, supabase);
 cron.schedule("0 22 * * *", async () => {
   console.log("[strategy-sub-cron] Running subscription billing check...");
   const db = supabaseAdmin || supabase;
-  if (!db || !pgPool) { console.warn("[strategy-sub-cron] No db client — skipping"); return; }
+  if (!db) { console.warn("[strategy-sub-cron] No db client — skipping"); return; }
 
   const today = new Date().toISOString().split("T")[0];
 
-  let dueSubs = [];
-  try {
-    const client = await pgPool.connect();
-    try {
-      const result = await client.query(
-        `SELECT id, user_id, strategy_name AS plan, amount_cents::float/100 AS amount, next_billing_date AS current_period_end
-         FROM strategy_subscriptions
-         WHERE status = 'active' AND next_billing_date <= $1`,
-        [today]
-      );
-      dueSubs = result.rows;
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error("[strategy-sub-cron] Fetch error:", err.message);
-    return;
-  }
+  const { data: dueSubs, error: fetchErr } = await db
+    .from("subscriptions")
+    .select("id, user_id, plan, amount, current_period_end")
+    .eq("status", "active")
+    .lte("current_period_end", today);
 
-  if (dueSubs.length === 0) { console.log("[strategy-sub-cron] No subscriptions due today."); return; }
+  if (fetchErr) { console.error("[strategy-sub-cron] Fetch error:", fetchErr.message); return; }
+  if (!dueSubs || dueSubs.length === 0) { console.log("[strategy-sub-cron] No subscriptions due today."); return; }
+
   console.log(`[strategy-sub-cron] Processing ${dueSubs.length} subscription(s)...`);
 
   for (const sub of dueSubs) {
@@ -686,22 +675,14 @@ cron.schedule("0 22 * * *", async () => {
         created_at: now,
       });
 
-      // Advance next_billing_date by one month
+      // Advance current_period_end by one month
       const billing = new Date(sub.current_period_end);
       const day = billing.getDate();
       billing.setMonth(billing.getMonth() + 1);
       if (billing.getDate() < day) billing.setDate(0);
       const nextDate = billing.toISOString().split("T")[0];
 
-      const pgClient = await pgPool.connect();
-      try {
-        await pgClient.query(
-          `UPDATE strategy_subscriptions SET next_billing_date = $1, updated_at = NOW() WHERE id = $2`,
-          [nextDate, sub.id]
-        );
-      } finally {
-        pgClient.release();
-      }
+      await db.from("subscriptions").update({ current_period_end: nextDate, updated_at: now }).eq("id", sub.id);
 
       console.log(`[strategy-sub-cron] Billed R${amountRands} for user ${sub.user_id} (${sub.plan}). New balance: R${newBalance}. Next billing: ${nextDate}`);
     } catch (err) {
@@ -2823,79 +2804,20 @@ app.get("/api/user/strategy-subscriptions", async (req, res) => {
     if (authError || !user) return res.status(401).json({ success: false, error: "Unauthorized" });
 
     const token = (req.headers.authorization || "").replace("Bearer ", "");
+    const db = getAuthenticatedDb(token);
 
-    if (!pgPool) return res.json({ success: true, subscriptions: [] });
+    const { data: subs, error: subsErr } = await db
+      .from("subscriptions")
+      .select("id, user_id, plan, amount, currency, current_period_end, status, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
-    const client = await pgPool.connect();
-    try {
-      const result = await client.query(
-        `SELECT id, user_id, strategy_id, strategy_name AS plan,
-                amount_cents::float / 100 AS amount,
-                'ZAR' AS currency,
-                next_billing_date AS current_period_end,
-                status, created_at
-         FROM strategy_subscriptions
-         WHERE user_id = $1
-         ORDER BY created_at DESC`,
-        [user.id]
-      );
-
-      // Backfill: if no records found here, check Supabase user_strategies and auto-populate
-      if (result.rows.length === 0 && SUPABASE_URL && SUPABASE_ANON_KEY) {
-        try {
-          const { createClient } = require('@supabase/supabase-js');
-          const userDb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            global: { headers: { Authorization: `Bearer ${token}` } }
-          });
-          const { data: userStrategies } = await userDb
-            .from("user_strategies")
-            .select("id, user_id, strategy_id, invested_amount, status, created_at")
-            .eq("user_id", user.id);
-
-          if (userStrategies && userStrategies.length > 0) {
-            const today = new Date();
-            const nextMonth = new Date(today);
-            nextMonth.setMonth(nextMonth.getMonth() + 1);
-            const nextBilling = nextMonth.toISOString().split("T")[0];
-
-            for (const us of userStrategies) {
-              // Get strategy name from strategies_c
-              let strategyName = "Strategy Subscription";
-              const { data: strat } = await userDb.from("strategies_c").select("name").eq("id", us.strategy_id).maybeSingle();
-              if (strat?.name) strategyName = strat.name;
-
-              await client.query(
-                `INSERT INTO strategy_subscriptions (user_id, strategy_id, strategy_name, next_billing_date, amount_cents, status)
-                 VALUES ($1, $2, $3, $4, 2900, $5)
-                 ON CONFLICT (user_id, strategy_id) DO NOTHING`,
-                [us.user_id, us.strategy_id, strategyName, nextBilling, us.status || "active"]
-              );
-            }
-            console.log(`[strategy-subscriptions] Backfilled ${userStrategies.length} record(s) from user_strategies for user ${user.id}`);
-
-            // Re-query after backfill
-            const refetch = await client.query(
-              `SELECT id, user_id, strategy_id, strategy_name AS plan,
-                      amount_cents::float / 100 AS amount,
-                      'ZAR' AS currency,
-                      next_billing_date AS current_period_end,
-                      status, created_at
-               FROM strategy_subscriptions
-               WHERE user_id = $1
-               ORDER BY created_at DESC`,
-              [user.id]
-            );
-            return res.json({ success: true, subscriptions: refetch.rows });
-          }
-        } catch (backfillErr) {
-          console.warn("[strategy-subscriptions] Backfill error:", backfillErr.message);
-        }
-      }
-
-      return res.json({ success: true, subscriptions: result.rows });
-    } finally {
-      client.release();
+    if (subsErr) {
+      console.error("[strategy-subscriptions] GET error:", subsErr.message);
+      return res.status(500).json({ success: false, error: subsErr.message });
     }
+
+    return res.json({ success: true, subscriptions: subs || [] });
   } catch (err) {
     console.error("[strategy-subscriptions] GET error:", err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -2914,25 +2836,27 @@ app.patch("/api/user/strategy-subscriptions/:id", async (req, res) => {
       return res.status(400).json({ success: false, error: "status must be 'active' or 'cancelled'" });
     }
 
-    if (!pgPool) return res.status(500).json({ success: false, error: "Database not available" });
+    const token = (req.headers.authorization || "").replace("Bearer ", "");
+    const db = getAuthenticatedDb(token);
 
-    const client = await pgPool.connect();
-    try {
-      const result = await client.query(
-        `UPDATE strategy_subscriptions
-         SET status = $1, updated_at = NOW()
-         WHERE id = $2 AND user_id = $3
-         RETURNING id, status`,
-        [status, id, user.id]
-      );
-      if (result.rowCount === 0) {
-        return res.status(404).json({ success: false, error: "Subscription not found" });
-      }
-      console.log(`[strategy-subscriptions] User ${user.id} set subscription ${id} to ${status}`);
-      return res.json({ success: true, subscription: result.rows[0] });
-    } finally {
-      client.release();
+    const { data, error: updateErr } = await db
+      .from("subscriptions")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("id, status")
+      .maybeSingle();
+
+    if (updateErr) {
+      console.error("[strategy-subscriptions] PATCH error:", updateErr.message);
+      return res.status(500).json({ success: false, error: updateErr.message });
     }
+    if (!data) {
+      return res.status(404).json({ success: false, error: "Subscription not found" });
+    }
+
+    console.log(`[strategy-subscriptions] User ${user.id} set subscription ${id} to ${status}`);
+    return res.json({ success: true, subscription: data });
   } catch (err) {
     console.error("[strategy-subscriptions] PATCH error:", err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -3410,29 +3334,45 @@ app.post("/api/record-investment", async (req, res) => {
         console.error("[record-investment] user_strategies upsert failed:", usErr.message);
       }
 
-      // Also upsert into strategy_subscriptions (Replit Postgres) so the subscriptions page shows it
-      if (pgPool) {
-        try {
-          let strategyName = name || symbol || "Strategy Subscription";
-          const today = new Date();
-          const nextMonth = new Date(today);
-          nextMonth.setMonth(nextMonth.getMonth() + 1);
-          const nextBilling = nextMonth.toISOString().split("T")[0];
-          const pgClient = await pgPool.connect();
-          try {
-            await pgClient.query(
-              `INSERT INTO strategy_subscriptions (user_id, strategy_id, strategy_name, next_billing_date, amount_cents, status)
-               VALUES ($1, $2, $3, $4, 2900, 'active')
-               ON CONFLICT (user_id, strategy_id) DO NOTHING`,
-              [userId, strategyId, strategyName, nextBilling]
-            );
-            console.log("[record-investment] strategy_subscriptions record ensured for strategy:", strategyId);
-          } finally {
-            pgClient.release();
+      // Also upsert into Supabase subscriptions table so the Manage Subscriptions page shows it
+      try {
+        const strategyName = name || symbol || "Strategy Subscription";
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        const nextBilling = nextMonth.toISOString().split("T")[0];
+
+        // Use user-authenticated client so RLS allows the insert (auth.uid() = user_id)
+        const userToken = req.headers.authorization?.replace("Bearer ", "");
+        const subDb = userToken && SUPABASE_URL && SUPABASE_ANON_KEY
+          ? (() => { const { createClient: cc } = require('@supabase/supabase-js'); return cc(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${userToken}` } } }); })()
+          : db;
+
+        const { data: existingSub } = await subDb
+          .from("subscriptions")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("plan", strategyName)
+          .maybeSingle();
+
+        if (!existingSub) {
+          const { error: subInsertErr } = await subDb.from("subscriptions").insert({
+            user_id: userId,
+            plan: strategyName,
+            amount: 29,
+            currency: "ZAR",
+            current_period_end: nextBilling,
+            status: "active",
+          });
+          if (subInsertErr) {
+            console.warn("[record-investment] subscriptions insert error:", subInsertErr.message);
+          } else {
+            console.log("[record-investment] subscriptions record created for strategy:", strategyName);
           }
-        } catch (subErr) {
-          console.warn("[record-investment] Could not write strategy_subscriptions:", subErr.message);
+        } else {
+          console.log("[record-investment] subscriptions record already exists for strategy:", strategyName);
         }
+      } catch (subErr) {
+        console.warn("[record-investment] Could not write subscriptions:", subErr.message);
       }
     }
 
