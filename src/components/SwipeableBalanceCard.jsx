@@ -64,6 +64,9 @@ const SwipeableBalanceCard = ({
   isBackFacing = true,
   forceVisible,
   mintNumber: mintNumberProp,
+  footerRightLabel,
+  footerRightValue,
+  footerRightMono = true,
 }) => {
   const [activeTab, setActiveTab] = useState("m");
   const [isOpen, setIsOpen] = useState(false);
@@ -727,6 +730,12 @@ const SwipeableBalanceCard = ({
       </div>
     );
 
+  const rightFooterLabel = footerRightLabel || "MINT NUMBER";
+  const rightFooterValue =
+    footerRightValue !== undefined && footerRightValue !== null && `${footerRightValue}`.trim() !== ""
+      ? footerRightValue
+      : (mintNumber ?? "GENERATING...");
+
   return (
     <div className="rounded-3xl gradient-hero-card shadow-hero p-5 relative overflow-hidden border border-white/5">
       {/* Ambient glows */}
@@ -893,9 +902,9 @@ const SwipeableBalanceCard = ({
         </div>
         <div className="w-px bg-white/10" />
         <div className="flex-1 pl-4">
-          <div className="text-[9px] tracking-[0.15em] text-white/50 font-semibold">MINT NUMBER</div>
-          <div className="text-sm font-bold text-white mt-0.5 font-mono">
-            {mintNumber ?? "GENERATING..."}
+          <div className="text-[9px] tracking-[0.15em] text-white/50 font-semibold">{rightFooterLabel}</div>
+          <div className={`text-sm font-bold text-white mt-0.5 ${footerRightMono ? "font-mono" : ""}`}>
+            {rightFooterValue}
           </div>
         </div>
       </div>

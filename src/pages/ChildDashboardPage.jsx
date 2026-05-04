@@ -16,16 +16,6 @@ const CARD_VISIBILITY_KEY = "mintBalanceVisible";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function getAge(dob) {
-  if (!dob) return null;
-  const birth = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age;
-}
-
 function fmt(cents) {
   const val = (cents || 0) / 100;
   return `R\u202F${val.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -971,9 +961,6 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   });
 
   const childName = [child?.first_name, child?.last_name].filter(Boolean).join(" ") || "Child";
-  const age = getAge(child?.date_of_birth);
-  const parentName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Parent";
-  const parentMintNumber = profile?.mintNumber || "";
   const childBalance = child?.available_balance || 0;
   const childKycStatus = String(child?.kyc_status || "pending").toLowerCase();
   const childKycLabel = childKycStatus === "completed"
@@ -1137,7 +1124,10 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
                   userId={userId}
                   isBackFacing
                   forceVisible={isCardVisible}
-                  mintNumber={profile?.mintNumber}
+                  mintNumber={child?.mint_number}
+                  footerRightLabel="CHILD"
+                  footerRightValue={childName}
+                  footerRightMono={false}
                 />
               </div>
             </div>
@@ -1292,67 +1282,6 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
                 <p className="text-xs text-slate-600">No activity yet. Transfer or invest to get started.</p>
               </div>
             )}
-          </motion.div>
-
-          {/* ── Account Info ── */}
-          <motion.div variants={item}>
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <div className="h-2 w-2 rounded-full bg-slate-300" />
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Account Details</p>
-            </div>
-            <div className="rounded-2xl shadow-lg border border-slate-200 p-5 bg-white">
-              <div className="space-y-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Account Type</span>
-                  <span className="font-semibold text-slate-900">Child (Minor)</span>
-                </div>
-                {child?.mint_number && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Mint Number</span>
-                    <span className="font-mono text-xs font-semibold text-slate-900">{child.mint_number}</span>
-                  </div>
-                )}
-                {age !== null && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Age</span>
-                    <span className="font-semibold text-slate-900">{age} year{age !== 1 ? "s" : ""}</span>
-                  </div>
-                )}
-                {child?.date_of_birth && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Date of Birth</span>
-                    <span className="font-semibold text-slate-900">
-                      {new Date(child.date_of_birth).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm border-t border-slate-100 pt-4">
-                  <span className="text-slate-600">Managed By</span>
-                  <span className="font-semibold text-slate-900">{parentName}</span>
-                </div>
-                {parentMintNumber && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Parent Mint #</span>
-                    <span className="font-mono text-xs font-semibold text-slate-900">{parentMintNumber}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">KYC Status</span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide border ${
-                      childKycStatus === "completed"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : childKycStatus === "rejected"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-amber-50 text-amber-700 border-amber-200"
-                    }`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${childKycStatus === "pending" ? "animate-pulse" : ""}`} style={{ backgroundColor: "currentColor" }} />
-                    {childKycLabel}
-                  </span>
-                </div>
-              </div>
-            </div>
           </motion.div>
 
         </motion.div>
