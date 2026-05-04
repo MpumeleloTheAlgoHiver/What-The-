@@ -160,6 +160,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
   const bankDropdownRef = useRef(null);
   const [kycAlreadyVerified, setKycAlreadyVerified] = useState(false);
+  const [kycVerificationDone, setKycVerificationDone] = useState(false);
   const [bankDone, setBankDone] = useState(false);
   const [bankLetterDone, setBankLetterDone] = useState(false);
   const [mandateDone, setMandateDone] = useState(false);
@@ -262,7 +263,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
     const identityCheckDone = !!existingOnboardingId || kycAlreadyVerified;
     const steps = [
       { step: 1, done: identityCheckDone },
-      { step: 2, done: true },
+      { step: 2, done: kycVerificationDone },
       { step: 3, done: addressDone },
       { step: 4, done: taxDone },
       { step: 5, done: bankDone },
@@ -601,7 +602,6 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
   useEffect(() => {
     const checkKycStatus = async () => {
       try {
-        // No apiBase prefix to force relative path
       const { data: userData } = await supabase.auth.getUser();
         const userId = userData?.user?.id;
         if (!userId) return;
@@ -613,7 +613,38 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
         const data = await res.json();
         if (data.success && data.status === "verified") {
           setKycAlreadyVerified(true);
-          if (step === 2) setShowProceed(true);
+          setKycVerificationDone(true);
+
+          if (step === 2) {
+            setShowProceed(true);
+
+            try {
+              const { data: packData } = await supabase
+                .from("user_onboarding_pack_details")
+                .select("pack_details")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+              if (packData?.pack_details) {
+                const packDetail = packData.pack_details;
+                const idDocs = Array.isArray(packDetail?.info?.idDocs) ? packDetail.info.idDocs : [];
+                const idDoc = idDocs.find(d => d.number && (d.idDocType === "ID_CARD" || d.idDocType === "PASSPORT" || d.idDocType === "DRIVERS"));
+
+                if (idDoc?.number) {
+                  setIdentityNumber(idDoc.number);
+                }
+              }
+
+              setTimeout(() => {
+                goToStep(getNextIncompleteStep(2));
+              }, 500);
+            } catch (e) {
+              console.error("Failed to extract ID from sumsub:", e);
+              setTimeout(() => {
+                goToStep(getNextIncompleteStep(2));
+              }, 500);
+            }
+          }
         }
       } catch {
       }
