@@ -6,7 +6,6 @@ const NavigationPill = ({ activeTab = "credit", onTabChange, className = "", the
   const tabs = [
     { id: "home", label: "Wealth" },
     { id: "credit", label: "Credit" },
-    { id: "transact", label: "Transact", disabled: true },
   ];
 
   const handleTabClick = (tabId) => {
