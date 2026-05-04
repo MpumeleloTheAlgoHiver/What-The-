@@ -557,6 +557,9 @@ const SwipeableBalanceCard = ({
                 pct: Number(pctValue)
               });
               setLatestBasketValue(basketValue);
+            } else {
+              setLatestBasketValue(0);
+              setReturnData5d({ pnl: 0, pct: 0 });
             }
           } else if (asset.security_id) {
             const { data, error } = await supabase
@@ -576,6 +579,9 @@ const SwipeableBalanceCard = ({
                 pct: Number(pctValue)
               });
               setLatestBasketValue(basketValue);
+            } else {
+              setLatestBasketValue(0);
+              setReturnData5d({ pnl: 0, pct: 0 });
             }
           }
         } else if (dbData.holdings.length > 0) {
