@@ -661,7 +661,7 @@ function TransactionRow({ tx }) {
         <p className="text-[11px] text-slate-600 mt-0.5">{date}</p>
       </div>
       <p className="text-sm font-bold tabular-nums text-purple-600">
-        {isCredit ? "+" : "-"}{fmt(Math.abs(tx.amount || 0))}
+        {isCredit ? "+" : "-"}{fmt(Math.round(Math.abs(tx.amount || 0) * 100))}
       </p>
     </div>
   );
@@ -983,13 +983,18 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
   async function fetchAll() {
     setLoading(true);
-    await Promise.all([
-      fetchHoldings(),
-      fetchParentWallet(),
-      fetchTransactions(),
-      fetchChildBalance(),
-    ]);
-    if (isMounted.current) setLoading(false);
+    try {
+      await Promise.all([
+        fetchHoldings(),
+        fetchParentWallet(),
+        fetchTransactions(),
+        fetchChildBalance(),
+      ]);
+    } catch (e) {
+      console.error("[child-dash] fetchAll error", e);
+    } finally {
+      if (isMounted.current) setLoading(false);
+    }
   }
 
   async function fetchChildBalance() {
@@ -1107,14 +1112,15 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
     fetchTransactions();
   }
 
-  const totalPortfolio = holdings.reduce((s, h) => s + (h.market_value || 0), 0);
-  const totalPnl = holdings.reduce((s, h) => {
-    if (h.unrealized_pnl != null) return s + Number(h.unrealized_pnl);
-    const cost = Number(h.avg_fill || 0) * Number(h.quantity || 0);
-    return s + ((Number(h.market_value) || 0) - cost);
+  // market_value and avg_fill are stored in rands; convert to cents for fmt
+  const totalPortfolioCents = holdings.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
+  const totalPnlCents = holdings.reduce((s, h) => {
+    const costRands = Number(h.avg_fill || 0) * Number(h.quantity || 0);
+    const marketRands = Number(h.market_value) || 0;
+    return s + Math.round((marketRands - costRands) * 100);
   }, 0);
-  const pnlPct = totalPortfolio > 0 ? ((totalPnl / Math.max(totalPortfolio - totalPnl, 1)) * 100) : 0;
-  const isPortUp = totalPnl >= 0;
+  const pnlPct = totalPortfolioCents > 0 ? ((totalPnlCents / Math.max(totalPortfolioCents - totalPnlCents, 1)) * 100) : 0;
+  const isPortUp = totalPnlCents >= 0;
 
   // Group holdings by strategy
   const strategyGroups = holdings.reduce((acc, h) => {
@@ -1126,20 +1132,21 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
   const strategyCards = Object.entries(strategyGroups).map(([sid, hs]) => {
     const strat = strategyMap[sid] || {};
-    const totalValue = hs.reduce((s, h) => s + (h.market_value || 0), 0);
-    const totalCost = hs.reduce((s, h) => s + Number(h.avg_fill || 0) * Number(h.quantity || 0), 0);
-    const pnl = totalValue - totalCost;
-    const pnlP = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
-    return { id: sid, name: strat.name || "Strategy", short_name: strat.short_name, risk_level: strat.risk_level, is_featured: strat.is_featured, totalValue, pnl, pnlPct: pnlP, holdings: hs };
+    const totalValueCents = hs.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
+    const totalCostCents = hs.reduce((s, h) => s + Math.round(Number(h.avg_fill || 0) * Number(h.quantity || 0) * 100), 0);
+    const pnlCents = totalValueCents - totalCostCents;
+    const pnlP = totalCostCents > 0 ? (pnlCents / totalCostCents) * 100 : 0;
+    return { id: sid, name: strat.name || "Strategy", short_name: strat.short_name, risk_level: strat.risk_level, is_featured: strat.is_featured, totalValue: totalValueCents, pnl: pnlCents, pnlPct: pnlP, holdings: hs };
   });
 
   // Best performing individual assets (top 5 by unrealized_pnl %)
   const bestAssets = [...holdings]
     .filter(h => h.symbol && h.market_value > 0)
     .map(h => {
-      const cost = Number(h.avg_fill || 0) * Number(h.quantity || 0);
-      const pnlR = (h.market_value || 0) - cost;
-      const pnlP = cost > 0 ? (pnlR / cost) * 100 : 0;
+      const costRands = Number(h.avg_fill || 0) * Number(h.quantity || 0);
+      const marketRands = h.market_value || 0;
+      const pnlR = marketRands - costRands;
+      const pnlP = costRands > 0 ? ((marketRands - costRands) / costRands) * 100 : 0;
       return { ...h, pnlR, pnlP };
     })
     .sort((a, b) => b.pnlP - a.pnlP)
@@ -1269,16 +1276,16 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase mb-1">Portfolio Value</p>
-                  <p className="text-2xl font-bold text-white tracking-tight">{fmt(totalPortfolio)}</p>
+                  <p className="text-2xl font-bold text-white tracking-tight">{fmt(totalPortfolioCents)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase mb-1">All-time return</p>
                   <span
-                    className="inline-flex items-center gap-1 text-sm font-bold"
+                    className={`inline-flex items-center gap-1.5 text-sm font-semibold tracking-tight ${isPortUp ? "text-emerald-300" : "text-red-300"}`}
                     style={{ color: isPortUp ? "#86efac" : "#fca5a5" }}
                   >
                     {isPortUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                    {isPortUp ? "+" : ""}{fmt(totalPnl)}&nbsp;
+                    {isPortUp ? "+" : ""}{fmt(totalPnlCents)}&nbsp;
                     <span className="font-semibold opacity-80">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
                   </span>
                 </div>
@@ -1418,7 +1425,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={`text-sm font-bold tabular-nums ${isUp ? "text-emerald-500" : "text-red-500"}`}>
-                          {isUp ? "+" : ""}{fmt(Math.abs(a.pnlR))}
+                          {isUp ? "+" : ""}{fmt(Math.round(a.pnlR * 100))}
                         </p>
                         <p className={`text-[10px] font-semibold tabular-nums ${isUp ? "text-emerald-500" : "text-red-500"}`}>
                           ({isUp ? "+" : ""}{a.pnlP.toFixed(2)}%)

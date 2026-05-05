@@ -7153,6 +7153,167 @@ app.delete('/api/family-members', async (req, res) => {
   }
 });
 
+// ── Child Wallet API ─────────────────────────────────────────────────────────
+app.get('/api/child-wallet', async (req, res) => {
+  const { family_member_id } = req.query || {};
+  if (!family_member_id) return res.status(400).json({ error: 'family_member_id is required.' });
+
+  try {
+    const db = supabaseAdmin || supabase;
+    const { data, error } = await db
+      .from('family_members')
+      .select('id, available_balance, mint_number, first_name')
+      .eq('id', family_member_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Child account not found.' });
+
+    return res.json({
+      balance: data.available_balance || 0,
+      mint_number: data.mint_number,
+      first_name: data.first_name,
+    });
+  } catch (e) {
+    console.error('[child-wallet] GET error:', e.message);
+    return res.status(500).json({ error: 'Failed to fetch balance.' });
+  }
+});
+
+app.post('/api/child-wallet', async (req, res) => {
+  const { action, family_member_id, amount } = req.body || {};
+
+  if (action !== 'transfer') {
+    return res.status(400).json({ error: 'Only action "transfer" is supported.' });
+  }
+  if (!family_member_id) return res.status(400).json({ error: 'family_member_id is required.' });
+
+  const amountCents = Number(amount);
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    return res.status(400).json({ error: 'Amount must be a positive integer (in cents).' });
+  }
+
+  let parentUserId;
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (token) {
+      const authClient = supabaseAdmin || supabase;
+      const { data: { user }, error: authErr } = await authClient.auth.getUser(token);
+      if (!authErr && user) parentUserId = user.id;
+    }
+  } catch {}
+  if (!parentUserId) {
+    try {
+      const db = supabaseAdmin || supabase;
+      const { data: fm } = await db
+        .from('family_members')
+        .select('primary_user_id')
+        .eq('id', family_member_id)
+        .maybeSingle();
+      parentUserId = fm?.primary_user_id;
+    } catch {}
+  }
+  if (!parentUserId) return res.status(401).json({ error: 'Could not identify parent.' });
+
+  let originalParentBalance = null;
+  let originalChildBalance = null;
+
+  try {
+    const transferRef = `CHILD-TRF-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const db = supabaseAdmin || supabase;
+
+    const { data: child, error: childErr } = await db
+      .from('family_members')
+      .select('id, primary_user_id, available_balance, first_name, relationship')
+      .eq('id', family_member_id)
+      .maybeSingle();
+
+    if (childErr) throw childErr;
+    if (!child) return res.status(404).json({ error: 'Child account not found.' });
+    if (child.relationship !== 'child') {
+      return res.status(400).json({ error: 'Transfers are only supported for child accounts.' });
+    }
+    if (child.primary_user_id !== parentUserId) {
+      return res.status(403).json({ error: 'You can only transfer to your own children.' });
+    }
+
+    originalChildBalance = child.available_balance || 0;
+
+    const { data: wallet, error: walletErr } = await db
+      .from('wallets')
+      .select('balance')
+      .eq('user_id', parentUserId)
+      .maybeSingle();
+
+    if (walletErr) throw walletErr;
+    if (!wallet) return res.status(404).json({ error: 'Parent wallet not found.' });
+
+    const parentBalanceCents = Math.round(Number(wallet.balance) * 100);
+    originalParentBalance = Number(wallet.balance);
+
+    if (parentBalanceCents < amountCents) {
+      return res.status(400).json({ error: 'Insufficient wallet balance.' });
+    }
+
+    const newParentBalanceRands = (parentBalanceCents - amountCents) / 100;
+    const { error: deductErr } = await db
+      .from('wallets')
+      .update({ balance: newParentBalanceRands, updated_at: new Date().toISOString() })
+      .eq('user_id', parentUserId);
+
+    if (deductErr) throw deductErr;
+
+    const newChildBalanceCents = originalChildBalance + amountCents;
+    const { error: creditErr } = await db
+      .from('family_members')
+      .update({ available_balance: newChildBalanceCents })
+      .eq('id', family_member_id);
+
+    if (creditErr) {
+      await db.from('wallets').update({ balance: originalParentBalance }).eq('user_id', parentUserId);
+      throw creditErr;
+    }
+
+    const { error: txErr } = await db.from('transactions').insert([
+      {
+        user_id: parentUserId,
+        family_member_id: family_member_id,
+        name: 'Transfer to child',
+        direction: 'debit',
+        amount: amountCents,
+        description: `Transfer to ${child.first_name || 'child'}'s account`,
+        store_reference: transferRef,
+        status: 'posted',
+      },
+      {
+        user_id: parentUserId,
+        family_member_id: family_member_id,
+        name: 'Transfer from parent',
+        direction: 'credit',
+        amount: amountCents,
+        description: 'Received from parent',
+        store_reference: transferRef,
+        status: 'posted',
+      },
+    ]);
+
+    if (txErr) {
+      console.error('[child-wallet] Transaction insert failed (transfer still applied):', txErr.message);
+    }
+
+    return res.json({
+      success: true,
+      child_balance: newChildBalanceCents,
+      parent_balance: Math.round(newParentBalanceRands * 100),
+      transaction_ref: transferRef,
+    });
+  } catch (e) {
+    console.error('[child-wallet] POST error:', e.message);
+    return res.status(500).json({ error: 'Transfer failed. Please try again.' });
+  }
+});
+
 // ── Funeral Cover Policy Save ─────────────────────────────────────────────
 app.post("/api/insurance/save-policy", async (req, res) => {
   try {
