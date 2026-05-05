@@ -64,20 +64,24 @@ export const useProfile = ({ enabled = true } = {}) => {
       let rowData = null;
       let rowError = null;
 
-      const { data: d1, error: e1 } = await supabase
-        .from("profiles")
-        .select(
-          "id, first_name, last_name, email, avatar_url, phone_number, date_of_birth, gender, address, id_number, watchlist"
-        )
-        .eq("id", user.id)
-        .maybeSingle();
+      // Run profiles and wallets queries in parallel
+      const [profilesRes, walletsRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(
+            "id, first_name, last_name, email, avatar_url, phone_number, date_of_birth, gender, address, id_number, watchlist"
+          )
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("wallets")
+          .select("balance, mint_number")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+      ]);
 
-      // Fetch from wallets table as well
-      const { data: wData } = await supabase
-        .from("wallets")
-        .select("balance, mint_number")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data: d1, error: e1 } = profilesRes;
+      const { data: wData } = walletsRes;
 
       const rowToBuild = d1 || { id: user.id, email: user.email };
       if (wData) {
