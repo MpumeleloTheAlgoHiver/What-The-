@@ -70,11 +70,17 @@ function buildChildAddedHtml(parentName, childName, dob) {
     </div>
     <p style="color:#334155;font-size:13px;line-height:1.6;margin-bottom:24px;">
       <strong>Here's how to get started:</strong><br>
-      1. Go to your Family Dashboard<br>
-      2. Tap on ${childName}'s account<br>
-      3. Transfer funds into their wallet<br>
-      4. Browse and invest in a child-friendly strategy
+      1. Open the Mint app and look for your <strong>account switcher</strong> at the top of the Home screen (your initials next to the Wealth / Credit tabs).<br>
+      2. Tap it to open the dropdown — you'll see <em>Main Account</em>, any linked <em>Spouse</em>, and each <em>Child Account</em> including ${childName}.<br>
+      3. Select <strong>${childName}</strong> to view their dashboard, or use the same dropdown to <em>Add Spouse Account</em> or <em>Add Child Account</em> at any time.<br>
+      4. From ${childName}'s dashboard, tap <strong>Transfer</strong> to fund their wallet, then <strong>Invest</strong> to choose a child-friendly strategy.
     </p>
+    <div style="background:#ede9fe;border-left:4px solid #7c3aed;border-radius:8px;padding:14px 18px;margin-bottom:24px;">
+      <p style="color:#4c1d95;font-size:12px;font-weight:700;margin:0 0 4px;">TIP</p>
+      <p style="color:#5b21b6;font-size:12px;line-height:1.55;margin:0;">
+        The account switcher at the top is where you manage everyone. Use <em>View Family Dashboard</em> at the bottom of the dropdown to see the whole family portfolio at a glance.
+      </p>
+    </div>
     <div style="text-align:center;">
       <a href="https://mymint.co.za" style="display:inline-block;background:linear-gradient(135deg,#1e1b4b,#312e81);color:white;padding:14px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:15px;">Go to Mint</a>
     </div>

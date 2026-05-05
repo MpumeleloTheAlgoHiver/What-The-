@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import SignaturePad from "signature_pad";
+import useSignaturePad from "../../lib/useSignaturePad";
 import generateLoanAgreementPdf from "../../lib/generateLoanAgreementPdf";
 import { supabase } from "../../lib/supabase";
 import { calculateSecuredLoan } from "./securedLoanCalc";
@@ -668,39 +668,14 @@ function StepFinalSummary({ calculation, verifiedAcc, onNext, onBack }) {
 // ─── Step 4: Legal & Signature ────────────────────────────────────────────────
 function StepLegal({ principal, calculation, salaryDay, verifiedAcc, profile, pledgedAssets, onNext, onCancel }) {
   const [checks, setChecks] = useState([false, false, false]);
-  const [sigHas, setSigHas] = useState(false);
   const canvasRef = useRef(null);
-  const sigPad = useRef(null);
-
-  useEffect(() => {
-    const resizeCanvas = () => {
-      if (canvasRef.current) {
-        const canvas = canvasRef.current;
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        canvas.getContext("2d").scale(ratio, ratio);
-        if (sigPad.current) sigPad.current.clear();
-      }
-    };
-
-    if (canvasRef.current) {
-      resizeCanvas();
-      sigPad.current = new SignaturePad(canvasRef.current, {
-        backgroundColor: "rgba(255, 255, 255, 0)",
-        penColor: "#6d28d9",
-        minWidth: 1,
-        maxWidth: 3
-      });
-      sigPad.current.addEventListener("endStroke", () => {
-        if (sigPad.current && !sigPad.current.isEmpty()) {
-          setSigHas(true);
-        }
-      });
-      window.addEventListener("resize", resizeCanvas);
-    }
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, []);
+  const sigPad = useSignaturePad(canvasRef, {
+    backgroundColor: "rgba(255, 255, 255, 0)",
+    penColor: "#6d28d9",
+    minWidth: 1,
+    maxWidth: 3,
+  });
+  const sigHas = !sigPad.isEmpty();
 
   const checkLabels = [
     "I authorise the pledge of assets and understand liquidation risks",
@@ -760,12 +735,7 @@ function StepLegal({ principal, calculation, salaryDay, verifiedAcc, profile, pl
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
         <button 
           type="button"
-          onClick={() => {
-            if (sigPad.current) {
-              sigPad.current.clear();
-              setSigHas(false);
-            }
-          }}
+          onClick={() => { sigPad.clear(); }}
           style={{ 
             background: "transparent", 
             border: "none", 
@@ -785,8 +755,8 @@ function StepLegal({ principal, calculation, salaryDay, verifiedAcc, profile, pl
       <button 
         style={{ ...S.ctaDark, ...(!checks.every(Boolean) || !sigHas ? S.ctaDarkDisabled : {}) }} 
         onClick={() => {
-          if (sigPad.current && !sigPad.current.isEmpty()) {
-            const dataUrl = sigPad.current.toDataURL();
+          if (!sigPad.isEmpty()) {
+            const dataUrl = sigPad.toDataURL();
             onNext(dataUrl);
           }
         }}

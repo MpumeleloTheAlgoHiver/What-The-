@@ -216,9 +216,6 @@ export default async function handler(req, res) {
                   user_id: parentUserId,
                   family_member_id: family_member_id,
                   security_id: sec.id,
-                  symbol: sec.symbol,
-                  name: sec.name,
-                  logo_url: sec.logo_url || null,
                   quantity: qty,
                   avg_fill: avgFillCents,
                   market_value: marketValueCents,
@@ -244,9 +241,6 @@ export default async function handler(req, res) {
           user_id: parentUserId,
           family_member_id: family_member_id,
           security_id: null,
-          symbol: strategy.name,
-          name: strategy.name,
-          logo_url: null,
           quantity: 1,
           avg_fill: amount,
           market_value: amount,
@@ -267,12 +261,12 @@ export default async function handler(req, res) {
       await db.from("transactions").insert({
         user_id: parentUserId,
         family_member_id: family_member_id,
-        type: "investment",
+        name: `Strategy Investment: ${strategy.name}`,
         direction: "debit",
         amount: amount,
         description: `${strategy.name} investment for ${child.first_name}`,
         store_reference: ref,
-        status: "completed",
+        status: "posted",
       });
     } catch (e) { console.warn("[child-invest] tx insert:", e.message); }
 

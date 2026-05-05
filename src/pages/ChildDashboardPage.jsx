@@ -647,7 +647,7 @@ function InvestModal({ child, onInvest, onClose }) {
 // ─── TransactionRow ──────────────────────────────────────────────────────────
 
 function TransactionRow({ tx }) {
-  const isCredit = tx.direction === "credit" || tx.type === "transfer_in";
+  const isCredit = tx.direction === "credit";
   const date = tx.created_at ? new Date(tx.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "";
   return (
     <div className="flex items-center gap-3.5 py-3.5">
@@ -657,7 +657,7 @@ function TransactionRow({ tx }) {
           : <ArrowUpRight className="h-4.5 w-4.5 text-purple-600" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-900 truncate">{tx.description || tx.type || "Transaction"}</p>
+        <p className="text-sm font-semibold text-slate-900 truncate">{tx.description || tx.name || "Transaction"}</p>
         <p className="text-[11px] text-slate-600 mt-0.5">{date}</p>
       </div>
       <p className="text-sm font-bold tabular-nums text-purple-600">
@@ -1005,13 +1005,29 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   async function fetchHoldings() {
     try {
       if (!supabase) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("stock_holdings_c")
-        .select("id, security_id, quantity, avg_fill, market_value, unrealized_pnl, strategy_id, symbol, name, logo_url")
+        .select("id, security_id, quantity, avg_fill, market_value, unrealized_pnl, strategy_id")
         .eq("family_member_id", child.id)
         .eq("Status", "active")
         .order("market_value", { ascending: false });
-      const rows = data || [];
+      if (error) { console.error("[child-dash] holdings query error", error); return; }
+      const baseRows = data || [];
+
+      // Enrich with security info (symbol/name/logo_url live on securities_c)
+      const securityIds = [...new Set(baseRows.map(h => h.security_id).filter(Boolean))];
+      let secMap = {};
+      if (securityIds.length > 0) {
+        const { data: secs } = await supabase
+          .from("securities_c")
+          .select("id, symbol, name, logo_url")
+          .in("id", securityIds);
+        (secs || []).forEach(s => { secMap[s.id] = s; });
+      }
+      const rows = baseRows.map(h => {
+        const sec = secMap[h.security_id] || {};
+        return { ...h, symbol: sec.symbol || null, name: sec.name || null, logo_url: sec.logo_url || null };
+      });
       if (isMounted.current) setHoldings(rows);
 
       // Fetch strategy names for any strategy holdings
@@ -1061,12 +1077,13 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   async function fetchTransactions() {
     try {
       if (!supabase) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("transactions")
-        .select("id, type, direction, amount, description, created_at")
+        .select("id, name, direction, amount, description, created_at")
         .eq("family_member_id", child.id)
         .order("created_at", { ascending: false })
         .limit(10);
+      if (error) { console.error("[child-dash] txns query error", error); return; }
       if (isMounted.current) setTransactions(data || []);
     } catch (e) { console.error("[child-dash] txns", e); }
   }
@@ -1091,7 +1108,11 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   }
 
   const totalPortfolio = holdings.reduce((s, h) => s + (h.market_value || 0), 0);
-  const totalPnl = holdings.reduce((s, h) => s + (h.unrealized_pnl || 0), 0);
+  const totalPnl = holdings.reduce((s, h) => {
+    if (h.unrealized_pnl != null) return s + Number(h.unrealized_pnl);
+    const cost = Number(h.avg_fill || 0) * Number(h.quantity || 0);
+    return s + ((Number(h.market_value) || 0) - cost);
+  }, 0);
   const pnlPct = totalPortfolio > 0 ? ((totalPnl / Math.max(totalPortfolio - totalPnl, 1)) * 100) : 0;
   const isPortUp = totalPnl >= 0;
 

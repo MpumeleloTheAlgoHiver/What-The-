@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import SignaturePad from "signature_pad";
 import jsPDF from "jspdf";
 import { Check, Home, Navigation, MapPin, Users, X, AlertCircle, PenTool } from "lucide-react";
+import useSignaturePad from "../lib/useSignaturePad";
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 const MINT_PURPLE   = [91, 33, 182];       // #5B21B6
@@ -541,13 +541,25 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
 
   // For "same address" path
   const sameCanvasRef = useRef(null);
-  const samePadRef = useRef(null);
+  const samePad = useSignaturePad(sameCanvasRef, {
+    enabled: answer === "same",
+    penColor: "rgb(30,27,75)",
+    minWidth: 1,
+    maxWidth: 2.5,
+  });
+  const samePadRef = samePad.padRef;
 
   // For "different address" path
   const [childAddress, setChildAddress] = useState({ line1: "", suburb: "", city: "", province: "", postalCode: "" });
   const [addressStep, setAddressStep] = useState("form"); // "form" | "sign"
   const diffCanvasRef = useRef(null);
-  const diffPadRef = useRef(null);
+  const diffPad = useSignaturePad(diffCanvasRef, {
+    enabled: answer === "different" && addressStep === "sign",
+    penColor: "rgb(30,27,75)",
+    minWidth: 1,
+    maxWidth: 2.5,
+  });
+  const diffPadRef = diffPad.padRef;
 
   const childName = `${childData?.first_name || ""} ${childData?.last_name || ""}`.trim() || "your child";
   const parentName = [parentProfile?.firstName, parentProfile?.lastName].filter(Boolean).join(" ") || "the undersigned";
@@ -574,27 +586,6 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
       })
     ).then(setCoGuardianProfiles);
   }, [coGuardians]);
-
-  // Init signature pads
-  useEffect(() => {
-    if (answer === "same" && sameCanvasRef.current && !samePadRef.current) {
-      samePadRef.current = new SignaturePad(sameCanvasRef.current, {
-        backgroundColor: "rgb(255,255,255)", penColor: "rgb(30,27,75)", minWidth: 1, maxWidth: 2.5,
-      });
-    }
-  }, [answer]);
-
-  useEffect(() => {
-    if (answer === "different" && addressStep === "sign" && diffCanvasRef.current && !diffPadRef.current) {
-      setTimeout(() => {
-        if (diffCanvasRef.current && !diffPadRef.current) {
-          diffPadRef.current = new SignaturePad(diffCanvasRef.current, {
-            backgroundColor: "rgb(255,255,255)", penColor: "rgb(30,27,75)", minWidth: 1, maxWidth: 2.5,
-          });
-        }
-      }, 100);
-    }
-  }, [answer, addressStep]);
 
   async function handleSameSign() {
     if (!samePadRef.current || samePadRef.current.isEmpty()) {
@@ -742,7 +733,7 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
               <p className="text-[18px] font-bold text-slate-900 leading-tight">Confirm residence</p>
             </div>
           </div>
-          <button onClick={() => { setAnswer(null); samePadRef.current = null; setError(""); }} className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition">
+          <button onClick={() => { setAnswer(null); setError(""); }} className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -772,9 +763,9 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
             Sign here to declare
           </div>
           <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white overflow-hidden shadow-sm" style={{ touchAction: "none" }}>
-            <canvas ref={sameCanvasRef} width={340} height={110} className="w-full" style={{ display: "block" }} />
+            <canvas ref={sameCanvasRef} className="w-full" style={{ display: "block", height: "110px", touchAction: "none" }} />
           </div>
-          <button onClick={() => samePadRef.current?.clear()} className="text-[11px] text-slate-400 hover:text-slate-600 mt-2.5 transition font-medium">↻ Clear signature</button>
+          <button onClick={samePad.clear} className="text-[11px] text-slate-400 hover:text-slate-600 mt-2.5 transition font-medium">↻ Clear signature</button>
         </div>
 
         {error && <div className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">
@@ -885,7 +876,7 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
               <p className="text-[18px] font-bold text-slate-900 leading-tight">Sign to confirm</p>
             </div>
           </div>
-          <button onClick={() => { setAddressStep("form"); setError(""); diffPadRef.current = null; }} className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition">
+          <button onClick={() => { setAddressStep("form"); setError(""); }} className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -919,9 +910,9 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
             Sign here to declare
           </div>
           <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white overflow-hidden shadow-sm" style={{ touchAction: "none" }}>
-            <canvas ref={diffCanvasRef} width={340} height={110} className="w-full" style={{ display: "block" }} />
+            <canvas ref={diffCanvasRef} className="w-full" style={{ display: "block", height: "110px", touchAction: "none" }} />
           </div>
-          <button onClick={() => diffPadRef.current?.clear()} className="text-[11px] text-slate-400 hover:text-slate-600 mt-2.5 transition font-medium">↻ Clear signature</button>
+          <button onClick={diffPad.clear} className="text-[11px] text-slate-400 hover:text-slate-600 mt-2.5 transition font-medium">↻ Clear signature</button>
         </div>
 
         {error && <div className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">

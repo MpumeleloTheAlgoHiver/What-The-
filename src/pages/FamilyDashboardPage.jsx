@@ -1084,8 +1084,14 @@ export default function FamilyDashboardPage({ onBack, userId, onOpenChildDashboa
   const totalMembers = 1 + members.length;
 
   useEffect(() => {
-    if (userId) { fetchMembers(); fetchPortfolio(); }
+    if (userId) { fetchMembers(); }
   }, [userId]);
+
+  // fetchPortfolio reads `members` to build child/spouse id lists,
+  // so it must re-run whenever members (or the user) changes.
+  useEffect(() => {
+    if (userId) { fetchPortfolio(); }
+  }, [userId, members]);
 
   async function fetchMembers() {
     setLoading(true);

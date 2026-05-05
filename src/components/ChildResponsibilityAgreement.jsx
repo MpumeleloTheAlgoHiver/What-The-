@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
-import SignaturePad from "signature_pad";
+import React, { useRef, useState } from "react";
 import jsPDF from "jspdf";
 import { X, Check, Loader2 } from "lucide-react";
+import useSignaturePad from "../lib/useSignaturePad";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -362,40 +362,21 @@ export default function ChildResponsibilityAgreement({
   saving = false
 }) {
   const [error, setError] = useState("");
-  const [sigEmpty, setSigEmpty] = useState(true);
   const canvasRef = useRef(null);
-  const sigPadRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const resize = () => {
-      const ratio = Math.max(window.devicePixelRatio || 1, 1);
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * ratio;
-      canvas.height = rect.height * ratio;
-      canvas.getContext("2d").scale(ratio, ratio);
-      sigPadRef.current?.clear();
-    };
-    sigPadRef.current = new SignaturePad(canvas, {
-      backgroundColor: "rgb(255,255,255)",
-      penColor: "rgb(30,27,75)",
-      minWidth: 1.5,
-      maxWidth: 3,
-    });
-    sigPadRef.current.addEventListener("endStroke", () => setSigEmpty(sigPadRef.current.isEmpty()));
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, []);
+  const { clear, isEmpty, toDataURL } = useSignaturePad(canvasRef, {
+    penColor: "rgb(30,27,75)",
+    minWidth: 1.5,
+    maxWidth: 3,
+  });
+  const sigEmpty = isEmpty();
 
   const handleSignAndFinish = async () => {
-    if (sigEmpty) {
+    if (isEmpty()) {
       setError("Please sign the agreement to continue.");
       return;
     }
     setError("");
-    const sigUrl = sigPadRef.current.toDataURL("image/png");
+    const sigUrl = toDataURL("image/png");
     const now = new Date().toISOString();
     try {
       const pdfBuffer = await buildChildAgreementPdf({
@@ -504,7 +485,7 @@ export default function ChildResponsibilityAgreement({
             style={{ touchAction: "none" }}
           />
           <button
-            onClick={() => { sigPadRef.current?.clear(); setSigEmpty(true); }}
+            onClick={clear}
             className="absolute top-2 right-2 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-200 transition"
           >
             Clear

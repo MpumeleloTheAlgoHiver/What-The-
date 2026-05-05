@@ -36,9 +36,9 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import SignaturePad from "signature_pad";
 import jsPDF from "jspdf";
 import { supabase } from "../lib/supabase";
+import useSignaturePad from "../lib/useSignaturePad";
 
 // ─── Image cache (module-level) ────────────────────────────────────────────
 const imageCache = new Map();
@@ -497,9 +497,7 @@ export default function AccountAgreementStep({
   const [fetchedOnboarding, setFetchedOnboarding] = useState({});
 
   const canvasRef = useRef(null);
-  const sigPadRef = useRef(null);
   const signatureDataUrlRef = useRef(null);
-  const [sigEmpty, setSigEmpty] = useState(true);
 
   // ── fetch latest onboarding & pack details ────────────────────────────────
   useEffect(() => {
@@ -584,45 +582,28 @@ export default function AccountAgreementStep({
 
   const resolvedMonthly = expectedMonthlyInvestment || fetchedOnboarding.expected_monthly_investment || "";
 
-  // ── signature pad ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (phase !== "sign" || !canvasRef.current) return;
-    const canvas = canvasRef.current;
+  // ── signature pad (shared hook handles DPR, resize preservation) ──────────
+  const { clear: clearSigPad, isEmpty: sigIsEmpty, toDataURL: sigToDataURL } = useSignaturePad(canvasRef, {
+    enabled: phase === "sign",
+    penColor: "rgb(20,20,20)",
+    minWidth: 1.5,
+    maxWidth: 3,
+  });
+  const sigEmpty = sigIsEmpty();
 
-    const resize = () => {
-      const ratio = Math.max(window.devicePixelRatio || 1, 1);
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * ratio;
-      canvas.height = rect.height * ratio;
-      canvas.getContext("2d").scale(ratio, ratio);
-      sigPadRef.current?.clear();
-    };
-
-    sigPadRef.current = new SignaturePad(canvas, {
-      backgroundColor: "rgb(255,255,255)",
-      penColor: "rgb(20,20,20)",
-      minWidth: 1.5, maxWidth: 3,
-    });
-    sigPadRef.current.addEventListener("endStroke", () => setSigEmpty(sigPadRef.current.isEmpty()));
-
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, [phase]);
-
-  const clearSignature = useCallback(() => { sigPadRef.current?.clear(); setSigEmpty(true); }, []);
+  const clearSignature = useCallback(() => { clearSigPad(); }, [clearSigPad]);
 
   // ── sign & save ───────────────────────────────────────────────────────────
   const handleSign = async () => {
-    if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
+    if (sigIsEmpty()) {
       setError("Please draw your signature before continuing.");
       return;
     }
-    setError("");
+
     setPhase("processing");
 
     try {
-      const sigDataUrl = sigPadRef.current.toDataURL("image/png");
+      const sigDataUrl = sigToDataURL("image/png");
       signatureDataUrlRef.current = sigDataUrl;
 
       const now = new Date().toISOString();
