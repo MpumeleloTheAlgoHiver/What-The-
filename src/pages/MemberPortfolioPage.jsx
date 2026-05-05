@@ -74,7 +74,8 @@ export default function MemberPortfolioPage({ member, onBack }) {
       const { data } = await supabase
         .from("stock_holdings_c")
         .select("id, symbol, name, quantity, average_cost, market_value, unrealized_pnl, logo_url")
-        .eq("user_id", member.id);
+        .eq("user_id", member.id)
+        .is("family_member_id", null);
       const h = data || [];
       setHoldings(h);
       setPortfolioValue(h.reduce((s, x) => s + (x.market_value || 0), 0));

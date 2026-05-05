@@ -3670,7 +3670,8 @@ app.get("/api/user/holdings", async (req, res) => {
     const holdingsFull = await db
       .from("stock_holdings_c")
       .select("id, user_id, security_id, strategy_id, quantity, avg_fill, market_value, unrealized_pnl, as_of_date, created_at, updated_at, Status, settlement_status, is_active, exit_price")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("family_member_id", null);
 
     if (!holdingsFull.error) {
       holdings = holdingsFull.data;
@@ -3680,7 +3681,8 @@ app.get("/api/user/holdings", async (req, res) => {
       const noSettlement = await db
         .from("stock_holdings_c")
         .select("id, user_id, security_id, strategy_id, quantity, avg_fill, market_value, unrealized_pnl, as_of_date, created_at, updated_at, Status, is_active, exit_price")
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .is("family_member_id", null);
 
       if (!noSettlement.error) {
         holdings = noSettlement.data;
@@ -3690,7 +3692,8 @@ app.get("/api/user/holdings", async (req, res) => {
         const noExtras = await db
           .from("stock_holdings_c")
           .select("id, user_id, security_id, strategy_id, quantity, avg_fill, market_value, unrealized_pnl, as_of_date, created_at, updated_at, Status")
-          .eq("user_id", userId);
+          .eq("user_id", userId)
+          .is("family_member_id", null);
         holdings = (noExtras.data || []).map(h => ({ ...h, is_active: true, exit_price: null }));
         holdingsError = noExtras.error;
       } else {
@@ -3853,6 +3856,7 @@ app.get("/api/user/strategies", async (req, res) => {
       .from("transactions")
       .select("id, name, amount, direction, transaction_date")
       .eq("user_id", userId)
+      .is("family_member_id", null)
       .eq("direction", "debit");
 
     if (txError) {
@@ -3890,6 +3894,7 @@ app.get("/api/user/strategies", async (req, res) => {
       .from("stock_holdings_c")
       .select("id, security_id, strategy_id, quantity, avg_fill")
       .eq("user_id", userId)
+      .is("family_member_id", null)
       .not("strategy_id", "is", null);
 
     const holdingStrategyIds = [...new Set((userStratHoldings || []).map(h => h.strategy_id).filter(Boolean))];
@@ -4106,6 +4111,7 @@ app.get("/api/user/transactions", async (req, res) => {
       .from("transactions")
       .select("id, user_id, direction, name, description, amount, store_reference, currency, status, settlement_status, transaction_date, created_at")
       .eq("user_id", userId)
+      .is("family_member_id", null)
       .order("transaction_date", { ascending: false })
       .limit(limit);
 
@@ -4114,6 +4120,7 @@ app.get("/api/user/transactions", async (req, res) => {
         .from("transactions")
         .select("id, user_id, direction, name, description, amount, store_reference, currency, status, transaction_date, created_at")
         .eq("user_id", userId)
+        .is("family_member_id", null)
         .order("transaction_date", { ascending: false })
         .limit(limit);
       transactions = fallback.data;

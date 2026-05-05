@@ -545,6 +545,73 @@ function InvestModal({ child, onInvest, onClose }) {
               {/* Amount entry (after selecting strategy) */}
               {selected && (
                 <div className="mt-2">
+                  {/* Strategy details header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={() => setSelected(null)}
+                      className="flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-700"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back
+                    </button>
+                  </div>
+
+                  {/* Strategy info card */}
+                  <div className="rounded-2xl bg-white border border-slate-200 p-4 mb-4">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-slate-900">{selected.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {selected.risk_level && (
+                            <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-600 border border-violet-100">{selected.risk_level}</span>
+                          )}
+                          {selected.is_featured && (
+                            <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-violet-100 text-violet-700">Featured</span>
+                          )}
+                        </div>
+                      </div>
+                      {selected.min_investment > 0 && (
+                        <p className="text-xs font-semibold text-slate-600">Min. {fmt(selected.min_investment)}</p>
+                      )}
+                    </div>
+                    {selected.description && (
+                      <p className="text-xs text-slate-600 mb-3">{selected.description}</p>
+                    )}
+                    {/* YTD return */}
+                    {selected.r_ytd != null && (
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 mb-3">
+                        <span className="text-xs font-semibold text-slate-600">YTD return</span>
+                        <span className={`text-xs font-semibold ${selected.r_ytd >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                          {selected.r_ytd >= 0 ? "+" : ""}{(selected.r_ytd * 100).toFixed(2)}%
+                        </span>
+                      </div>
+                    )}
+                    {/* Holdings snapshot */}
+                    {selected.holdingsList?.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex -space-x-2">
+                          {selected.holdingsList.slice(0, 3).map((h) => (
+                            <div key={h.symbol} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
+                              {h.logo_url ? (
+                                <img src={h.logo_url} alt={h.symbol} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[8px] font-bold text-slate-600">
+                                  {h.symbol?.substring(0, 2)}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {selected.holdingsList.length > 3 && (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[10px] font-semibold text-slate-500">
+                              +{selected.holdingsList.length - 3}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-xs font-semibold text-slate-500">Holdings snapshot</span>
+                      </div>
+                    )}
+                  </div>
+
                   <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 ml-0.5">
                     Investment Amount (ZAR)
                   </label>
@@ -1021,7 +1088,9 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
       // Enrich with security info (symbol/name/logo_url live on securities_c)
       const securityIds = [...new Set(baseRows.map(h => h.security_id).filter(Boolean))];
+      const strategyIds = [...new Set(baseRows.map(h => h.strategy_id).filter(Boolean))];
       let secMap = {};
+      let stratMap = {};
       if (securityIds.length > 0) {
         const { data: secs } = await supabase
           .from("securities_c")
@@ -1029,22 +1098,20 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
           .in("id", securityIds);
         (secs || []).forEach(s => { secMap[s.id] = s; });
       }
+      if (strategyIds.length > 0) {
+        const { data: strats } = await supabase
+          .from("strategies_c")
+          .select("id, name, short_name, description, risk_level, min_investment, is_kid_strategy, is_featured")
+          .in("id", strategyIds);
+        (strats || []).forEach(s => { stratMap[s.id] = s; });
+      }
       const rows = baseRows.map(h => {
         const sec = secMap[h.security_id] || {};
         return { ...h, symbol: sec.symbol || null, name: sec.name || null, logo_url: sec.logo_url || null };
       });
-      if (isMounted.current) setHoldings(rows);
-
-      // Fetch strategy names for any strategy holdings
-      const stratIds = [...new Set(rows.map(h => h.strategy_id).filter(Boolean))];
-      if (stratIds.length > 0) {
-        const { data: strats } = await supabase
-          .from("strategies_c")
-          .select("id, name, short_name, risk_level, is_featured")
-          .in("id", stratIds);
-        const map = {};
-        (strats || []).forEach(s => { map[s.id] = s; });
-        if (isMounted.current) setStrategyMap(map);
+      if (isMounted.current) {
+        setHoldings(rows);
+        setStrategyMap(stratMap);
       }
     } catch (e) { console.error("[child-dash] holdings", e); }
   }
@@ -1133,7 +1200,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const strategyCards = Object.entries(strategyGroups).map(([sid, hs]) => {
     const strat = strategyMap[sid] || {};
     const totalValueCents = hs.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
-    const totalCostCents = hs.reduce((s, h) => s + Math.round(Number(h.avg_fill || 0) * Number(h.quantity || 0) * 100), 0);
+    const totalCostCents = hs.reduce((s, h) => s + Math.round(Number(h.avg_fill || 0) * Number(h.quantity || 0)), 0);
     const pnlCents = totalValueCents - totalCostCents;
     const pnlP = totalCostCents > 0 ? (pnlCents / totalCostCents) * 100 : 0;
     return { id: sid, name: strat.name || "Strategy", short_name: strat.short_name, risk_level: strat.risk_level, is_featured: strat.is_featured, totalValue: totalValueCents, pnl: pnlCents, pnlPct: pnlP, holdings: hs };

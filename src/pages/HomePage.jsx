@@ -125,6 +125,7 @@ const HomePage = ({
         .from('stock_holdings_c')
         .select('id, security_id, strategy_id, quantity, avg_fill, market_value, unrealized_pnl, Status')
         .eq('user_id', profile.id)
+        .is('family_member_id', null)
         .eq('Status', 'active');
 
       if (holdingsError) throw holdingsError;
