@@ -23,6 +23,7 @@ import OpenStrategiesPage from "./pages/OpenStrategiesPage.jsx";
 import MorePage from "./pages/MorePage.jsx";
 import OnboardingPage from "./pages/OnboardingPage.jsx";
 import InstantLiquidityPage from "./pages/credit/InstantLiquidity.jsx";
+import CreditHowItWorks from "./pages/credit/CreditHowItWorks.jsx";
 import { useProfile } from "./lib/useProfile";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import TransactPage from "./pages/TransactPage.jsx";
@@ -876,6 +877,8 @@ const App = () => {
         return <EditProfilePage onNavigate={noOp} onBack={noOp} />;
       case 'profileDetails':
         return <ProfileDetailsPage onNavigate={noOp} onBack={noOp} />;
+      case 'creditHowItWorks':
+        return <CreditHowItWorks onBack={noOp} />;
       case 'creditApply':
         return <CreditApplyPage onBack={noOp} onTabChange={setCurrentPage} />;
       case 'creditRepay':
@@ -1999,6 +2002,14 @@ const App = () => {
     return (
       <SwipeBackWrapper onBack={goBack} enabled={canSwipeBack} previousPage={previousPageComponent}>
         <InvitePage onBack={goBack} />
+      </SwipeBackWrapper>
+    );
+  }
+
+  if (currentPage === "creditHowItWorks") {
+    return (
+      <SwipeBackWrapper onBack={() => setCurrentPage("credit")} enabled={canSwipeBack} previousPage={previousPageComponent}>
+        <CreditHowItWorks onBack={() => setCurrentPage("credit")} />
       </SwipeBackWrapper>
     );
   }

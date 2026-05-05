@@ -20,7 +20,7 @@ import RepayLiquidity from "./RepayLiquidity";
 import NewPortfolio from "../NewPortfolioPage.jsx";
 
 // --- LIB ---
-import { LendingEngine } from "../../lib/LendingEngine";
+import { calculateSecuredLoan, SECURED_MONTHLY_RATE } from "./securedLoanCalc";
 
 // --- CONSTANTS ---
 const sortOptions = ["Balance (High)", "Score (High)", "Market Cap", "Dividend Yield"];
@@ -33,8 +33,8 @@ const normalizeLoanType = (value, fallback = "secured") => {
 
 // --- MINI CHART COMPONENT ---
 const AssetMiniChart = ({ data, color = "#7c3aed" }) => (
-  <div className="h-8 w-16">
-    <ResponsiveContainer width="100%" height="100%" minHeight={32}>
+  <div className="h-8 w-16" style={{ minWidth: 64, minHeight: 32 }}>
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={32}>
       <LineChart data={data.map((v, i) => ({ v, i }))}>
         <YAxis hide domain={['dataMin', 'dataMax']} />
         <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
@@ -254,22 +254,25 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
   };
 
   const handleConfirmPledge = async () => {
+    if (isProcessing) return;
+    const principal = parseFloat(pledgeAmount);
+    if (!principal || isNaN(principal) || principal <= 0) {
+      alert("Please enter a valid pledge amount greater than R0.");
+      return;
+    }
     setIsProcessing(true);
     try {
-      const principal = parseFloat(pledgeAmount);
-      const engine = new LendingEngine({
-        loanType: 'securitised',
-        principal: principal,
+      const calculation = calculateSecuredLoan({
+        principal,
         originationDate: new Date(),
-        nextSalaryDate: nextSalaryDate,
-        termMonths: termMonths
+        nextSalaryDate,
+        termMonths,
       });
-      const calculation = engine.calculateLoan();
 
       const { data: loan, error: loanErr } = await supabase.from('loan_application').insert({
         user_id: profile.id,
         principal_amount: principal,
-        interest_rate: engine.getMonthlyRate(),
+        interest_rate: SECURED_MONTHLY_RATE,
         amount_repayable: calculation.totalRepayable,
         number_of_months: termMonths,
         first_repayment_date: calculation.paymentDates[0].toISOString(),
@@ -426,9 +429,9 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/60">Borrowing Power</p>
                   <button onClick={() => setInfoModal('collateral')}><Info size={12} className="text-white/40" /></button>
                 </div>
-                <p className="text-4xl font-light tracking-tight drop-shadow-md" style={{ fontFamily: fonts.display }}>
-                  {loading ? "..." : formatZar(totalAvailable)}
-                </p>
+                <div className="min-h-[40px] flex items-center">
+                  {loading ? <div className="h-9 w-40 bg-white/20 animate-pulse rounded-xl" /> : <p className="text-4xl font-light tracking-tight drop-shadow-md" style={{ fontFamily: fonts.display }}>{formatZar(totalAvailable)}</p>}
+                </div>
               </div>
               <div className="h-12 w-12 rounded-[18px] bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
                 <Zap size={20} className="text-violet-300" />
@@ -438,11 +441,11 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
             <div className="relative z-10 grid grid-cols-2 gap-4 border-t border-white/10 pt-5">
               <div>
                 <p className="text-[8px] font-black uppercase tracking-[0.15em] text-white/50 mb-1">Total Portfolio</p>
-                <p className="text-sm font-bold text-white">{formatZar(totalPortfolioValue)}</p>
+                {loading ? <div className="h-5 w-24 bg-white/20 animate-pulse rounded mt-1" /> : <p className="text-sm font-bold text-white">{formatZar(totalPortfolioValue)}</p>}
               </div>
               <div>
                 <p className="text-[8px] font-black uppercase tracking-[0.15em] text-white/50 mb-1">Eligible Assets</p>
-                <p className="text-sm font-bold text-white">{qualifyingCount} <span className="text-white/40 font-normal">/ {portfolioItems.length}</span></p>
+                {loading ? <div className="h-5 w-16 bg-white/20 animate-pulse rounded mt-1" /> : <p className="text-sm font-bold text-white">{qualifyingCount} <span className="text-white/40 font-normal">/ {portfolioItems.length}</span></p>}
               </div>
             </div>
           </div>
@@ -578,7 +581,30 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
           {/* List of Collateral Cards */}
           <div className="space-y-3">
             {loading ? (
-              <div className="text-center py-10 opacity-40 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Analyzing...</div>
+              <>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-slate-100 flex flex-col gap-4 animate-pulse">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="h-11 w-11 rounded-2xl bg-slate-100"></div>
+                        <div>
+                          <div className="h-3 w-16 bg-slate-100 rounded mb-2"></div>
+                          <div className="h-6 w-24 bg-slate-100 rounded"></div>
+                        </div>
+                      </div>
+                      <div className="h-5 w-16 bg-slate-100 rounded-full"></div>
+                    </div>
+                    <div className="border-t border-slate-50 pt-4 flex justify-between items-center">
+                      <div>
+                        <div className="h-3 w-20 bg-slate-100 rounded mb-2"></div>
+                        <div className="h-4 w-16 bg-slate-100 rounded"></div>
+                      </div>
+                      <div className="h-8 w-16 bg-slate-100 rounded"></div>
+                      <div className="h-5 w-16 bg-slate-100 rounded-full"></div>
+                    </div>
+                  </div>
+                ))}
+              </>
             ) : filteredItems.length === 0 ? (
               <div className="text-center py-10 text-slate-400 text-xs italic">No matching assets found</div>
             ) : filteredItems.map((item) => {
@@ -821,8 +847,7 @@ const InstantLiquidity = ({ profile, onOpenNotifications, onTabChange, onLinkBan
 
               {/* Quote Logic Summary */}
               {(() => {
-                const engine = new LendingEngine({ loanType: 'securitised', principal: pledgeAmount || 0, originationDate: new Date(), nextSalaryDate: nextSalaryDate, termMonths: termMonths });
-                const calc = engine.calculateLoan();
+                const calc = calculateSecuredLoan({ principal: pledgeAmount || 0, originationDate: new Date(), nextSalaryDate, termMonths });
                 return (
                   <div className="bg-slate-900 rounded-2xl p-5 text-white">
                     <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">

@@ -93,9 +93,9 @@ const LiquidityHistory = ({ onBack, profile, fonts }) => {
         <div className="bg-white rounded-[32px] p-6 shadow-xl shadow-slate-200/40 border border-slate-100 flex justify-between items-center animate-in slide-in-from-bottom-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-violet-500 mb-1">Lifetime Borrowed</p>
-            <h2 className="text-3xl font-light tracking-tight text-slate-900" style={{ fontFamily: fonts?.display }}>
+            {loading ? <div className="h-9 w-32 bg-slate-100 animate-pulse rounded mt-1" /> : <h2 className="text-3xl font-light tracking-tight text-slate-900" style={{ fontFamily: fonts?.display }}>
               {formatZar(lifetimeBorrowed)}
-            </h2>
+            </h2>}
           </div>
           <div className="h-14 w-14 rounded-2xl bg-violet-50 flex items-center justify-center border border-violet-100">
             <History className="text-violet-600" size={24} />
@@ -117,9 +117,21 @@ const LiquidityHistory = ({ onBack, profile, fonts }) => {
         {/* Transactions List */}
         <div className="space-y-3">
           {loading ? (
-            <div className="text-center py-20 opacity-40 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">
-              Syncing Ledger...
-            </div>
+            <>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-white rounded-[24px] p-4 flex items-center gap-4 shadow-sm border border-slate-100 animate-pulse">
+                  <div className="w-12 h-12 shrink-0 rounded-2xl bg-slate-100"></div>
+                  <div className="flex-1">
+                    <div className="h-4 w-32 bg-slate-100 rounded mb-2"></div>
+                    <div className="h-3 w-24 bg-slate-100 rounded"></div>
+                  </div>
+                  <div className="text-right flex flex-col items-end">
+                    <div className="h-4 w-16 bg-slate-100 rounded mb-2"></div>
+                    <div className="h-2 w-12 bg-slate-100 rounded"></div>
+                  </div>
+                </div>
+              ))}
+            </>
           ) : filteredTransactions.length === 0 ? (
             <div className="bg-white rounded-[36px] p-10 text-center border border-slate-100 mt-8 shadow-sm animate-in fade-in duration-700">
               <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-6 text-slate-300">

@@ -23,6 +23,59 @@ const CreditHome = ({ profile, onOpenNotifications, onTabChange }) => {
     .toUpperCase() || "—";
 
   const [navigating, setNavigating] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [isConsenting, setIsConsenting] = useState(false);
+
+  const handleConsent = async () => {
+    if (!profile?.id) return;
+    setIsConsenting(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          declarations: {
+            experian_consent: { 
+              agreed: true, 
+              text: "I consent to a credit bureau check with Experian.", 
+              at: new Date().toISOString() 
+            },
+            bank_link_consent: { 
+              agreed: true, 
+              text: "I consent to link my bank account to verify income & expenses.", 
+              at: new Date().toISOString() 
+            },
+            salary_truth: { 
+              agreed: true, 
+              text: "I confirm the salary and employer details I provide are true.", 
+              at: new Date().toISOString() 
+            },
+            debicheck_consent: { 
+              agreed: true, 
+              text: "I consent to an authenticated DebiCheck mandate if approved.", 
+              at: new Date().toISOString() 
+            }
+          }
+        })
+        .eq('id', profile.id);
+
+      if (error) {
+        console.error("Consent Error:", error);
+      } else {
+        if (profile) {
+          if (!profile.declarations) profile.declarations = {};
+          profile.declarations.debicheck_consent = { agreed: true };
+        }
+        setShowConsentModal(false);
+        if (pendingAction === "portfolio") onTabChange("instantLiquidity");
+        if (pendingAction === "unsecured") handleUnsecuredClick();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsConsenting(false);
+    }
+  };
 
   // Checkpoint: if the user has an active unsecured loan → dashboard, else → apply flow
   const handleUnsecuredClick = useCallback(async () => {
@@ -166,19 +219,51 @@ const CreditHome = ({ profile, onOpenNotifications, onTabChange }) => {
           <h1 className="text-white text-[44px] font-light tracking-tight leading-[1.05] mb-8" style={{ fontFamily: fonts.display }}>
             Borrowing has<br /> never been <span className="font-semibold text-violet-400">easier</span>
           </h1>
-          <div className="flex items-center justify-between opacity-60 text-white">
-            <span className="text-xs font-medium tracking-wide">How it works</span>
+          <button 
+            onClick={() => onTabChange("creditHowItWorks")}
+            className="flex items-center justify-between opacity-60 text-white hover:opacity-100 transition-opacity active:scale-95"
+          >
+            <span className="text-xs font-medium tracking-wide mr-2">How it works</span>
             <HelpCircle className="h-6 w-6" />
-          </div>
+          </button>
         </div>
 
         <div className="space-y-4">
           {ctaCards.map((item, i) => (
             <button
               key={i}
-              onClick={() => {
-                if (item.id === "portfolio") onTabChange("instantLiquidity");
-                if (item.id === "unsecured") handleUnsecuredClick();
+              onClick={async () => {
+                if (navigating) return;
+
+                let hasDeclarations = profile?.declarations && Object.keys(profile.declarations).length > 0;
+
+                if (!hasDeclarations && profile?.id) {
+                  setNavigating(true);
+                  try {
+                    const { data } = await supabase
+                      .from('profiles')
+                      .select('declarations')
+                      .eq('id', profile.id)
+                      .single();
+                    
+                    if (data?.declarations && Object.keys(data.declarations).length > 0) {
+                      hasDeclarations = true;
+                      profile.declarations = data.declarations;
+                    }
+                  } catch (err) {
+                    console.error("Failed to check declarations", err);
+                  } finally {
+                    setNavigating(false);
+                  }
+                }
+
+                if (!hasDeclarations) {
+                  setPendingAction(item.id);
+                  setShowConsentModal(true);
+                } else {
+                  if (item.id === "portfolio") onTabChange("instantLiquidity");
+                  if (item.id === "unsecured") handleUnsecuredClick();
+                }
               }}
               disabled={navigating}
               className="w-full flex items-center justify-between bg-white p-2 pl-8 rounded-full group active:scale-[0.98] transition-all shadow-2xl"
@@ -198,6 +283,51 @@ const CreditHome = ({ profile, onOpenNotifications, onTabChange }) => {
           ))}
         </div>
       </div>
+
+      {showConsentModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#1a1a24] border border-white/10 rounded-[32px] p-6 w-full max-w-sm text-white shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-indigo-500" />
+            
+            <h2 className="text-xl font-semibold mb-4 tracking-tight">Data Consent & Declarations</h2>
+            
+            <div className="space-y-4 mb-8 max-h-[40vh] overflow-y-auto pr-2 text-sm text-slate-300">
+              <p>By proceeding, you agree to the following:</p>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>I consent to a credit bureau check with Experian.</li>
+                <li>I consent to link my bank account to verify income & expenses.</li>
+                <li>I confirm the salary and employer details I provide are true.</li>
+                <li>I consent to an authenticated DebiCheck mandate if approved.</li>
+              </ul>
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowConsentModal(false)}
+                disabled={isConsenting}
+                className="flex-1 py-3.5 rounded-full border border-white/10 font-medium text-sm hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConsent}
+                disabled={isConsenting}
+                className="flex-1 py-3.5 rounded-full bg-violet-600 font-medium text-sm shadow-lg hover:bg-violet-500 transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                {isConsenting ? (
+                  <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  "Accept & Proceed"
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </>
   );
 };

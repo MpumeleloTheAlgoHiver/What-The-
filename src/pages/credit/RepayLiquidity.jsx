@@ -190,9 +190,9 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
           <div className="relative z-10 flex justify-between items-start">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/60 mb-2">Total Outstanding Debt</p>
-              <p className="text-4xl font-light tracking-tight drop-shadow-md" style={{ fontFamily: fonts?.display }}>
-                {loading ? "..." : formatZar(totalDebt)}
-              </p>
+              <div className="min-h-[40px] flex items-center">
+                {loading ? <div className="h-9 w-40 bg-white/20 animate-pulse rounded-xl" /> : <p className="text-4xl font-light tracking-tight drop-shadow-md" style={{ fontFamily: fonts?.display }}>{formatZar(totalDebt)}</p>}
+              </div>
             </div>
             <div className="h-12 w-12 rounded-[18px] bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
               <Landmark size={20} className="text-violet-300" />
@@ -207,8 +207,31 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
         {/* Loans List */}
         <div className="space-y-4">
           {loading ? (
-            <div className="text-center py-20 opacity-40 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">
-              Fetching Records...
+            <div className="space-y-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="w-full bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 animate-pulse">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-slate-100"></div>
+                      <div>
+                        <div className="h-2 w-16 bg-slate-100 rounded mb-1"></div>
+                        <div className="h-4 w-24 bg-slate-100 rounded"></div>
+                      </div>
+                    </div>
+                    <div className="h-6 w-20 bg-slate-100 rounded-full"></div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-100/80 flex justify-between items-end">
+                    <div>
+                      <div className="h-2 w-24 bg-slate-100 rounded mb-2"></div>
+                      <div className="h-8 w-32 bg-slate-100 rounded"></div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <div className="h-2 w-10 bg-slate-100 rounded mb-1"></div>
+                      <div className="h-4 w-16 bg-slate-100 rounded"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : loans.length === 0 ? (
             <div className="bg-white rounded-[36px] p-10 text-center border border-slate-100 shadow-sm mt-4 animate-in fade-in duration-700">
@@ -333,10 +356,21 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
               const totalRepayable = Number(selectedLoan.amount_repayable || 0);
               const months = Number(selectedLoan.number_of_months || 1);
               const monthlyDue = totalRepayable > 0 ? totalRepayable / months : 0;
-              const interestRate = Number(selectedLoan.interest_rate || 0);
-              const annualRate = (interestRate * 12 * 100);
-              const amountPaid = Math.max(0, totalRepayable - principal);
+
+              // Secured credit uses SA Prime rate
+              const PRIME_RATE = 10.50;
+
+              // Estimate the original principal from amount_repayable to compute real progress
+              // Original insert: amount_repayable = principal + interest + initiation + service_fees
+              // interest ≈ principal * (prime/12/100) * months, initiation ≈ capped at R1050, service = R69 * months
+              const estServiceFees = 69 * months;
+              const estInitiation = 1050; // capped for most real loans
+              const monthlyRate = PRIME_RATE / 12 / 100;
+              const estOriginalPrincipal = Math.max(0, (totalRepayable - estInitiation - estServiceFees) / (1 + monthlyRate * months));
+              // Amount actually paid = how much principal has been reduced from its original value
+              const amountPaid = Math.max(0, estOriginalPrincipal - principal);
               const progressPct = totalRepayable > 0 ? Math.min(100, (amountPaid / totalRepayable) * 100) : 0;
+
               const nextDate = selectedLoan.first_repayment_date
                 ? new Date(selectedLoan.first_repayment_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
                 : 'TBD';
@@ -378,7 +412,7 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
                         className="h-full rounded-full transition-all duration-700"
                         style={{
                           width: `${progressPct}%`,
-                          background: progressPct >= 75 ? '#10b981' : progressPct >= 40 ? '#6d28d9' : '#6d28d9'
+                          background: progressPct >= 75 ? '#10b981' : '#6d28d9'
                         }}
                       />
                     </div>
@@ -396,7 +430,7 @@ const RepayLiquidity = ({ onBack, profile, fonts }) => {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Interest Rate</span>
-                      <span className="text-xs font-bold text-slate-900">{annualRate > 0 ? `${annualRate.toFixed(2)}% p.a.` : '—'}</span>
+                      <span className="text-xs font-bold text-slate-900">Prime ({PRIME_RATE.toFixed(2)}% p.a.)</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Next Payment</span>

@@ -41,6 +41,11 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
     }
     setLoading(true);
 
+    // Safety timeout — stop spinner after 15s even if Supabase hangs
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
+
     try {
       const { data, error } = await supabase
         .from('loan_application')
@@ -72,7 +77,9 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
       setLoans(data || []);
     } catch (err) {
       console.error("Error fetching active loans:", err.message);
+      setLoans([]);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -260,8 +267,44 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
         {/* --- LOANS LIST --- */}
         <div className="space-y-5">
           {loading ? (
-            <div className="text-center py-20 opacity-40 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">
-              Syncing Data...
+            <div className="space-y-5">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-white rounded-[32px] p-6 shadow-xl shadow-slate-200/40 border border-slate-100 animate-pulse">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-slate-100"></div>
+                      <div>
+                        <div className="h-3 w-16 bg-slate-100 rounded mb-1"></div>
+                        <div className="h-4 w-20 bg-slate-100 rounded"></div>
+                      </div>
+                    </div>
+                    <div className="h-6 w-16 bg-slate-100 rounded-full"></div>
+                  </div>
+                  <div className="mb-4">
+                    <div className="h-3 w-24 bg-slate-100 rounded mb-2"></div>
+                    <div className="h-8 w-32 bg-slate-100 rounded mb-4"></div>
+                    <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div>
+                        <div className="h-3 w-20 bg-slate-100 rounded mb-1"></div>
+                        <div className="h-4 w-24 bg-slate-100 rounded"></div>
+                      </div>
+                      <div className="text-right flex flex-col items-end">
+                        <div className="h-3 w-16 bg-slate-100 rounded mb-1"></div>
+                        <div className="h-4 w-16 bg-slate-100 rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-6">
+                    <div className="bg-slate-50 rounded-2xl p-3 h-14 border border-slate-100"></div>
+                    <div className="bg-slate-50 rounded-2xl p-3 h-14 border border-slate-100"></div>
+                    <div className="bg-slate-50 rounded-2xl p-3 h-14 border border-slate-100"></div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1 py-6 rounded-2xl bg-slate-100"></div>
+                    <div className="flex-1 py-6 rounded-2xl bg-slate-100"></div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : filteredLoans.length === 0 && loans.length > 0 ? (
             <div className="text-center py-10 text-slate-400 text-xs italic">No matching facilities found</div>
@@ -269,8 +312,21 @@ const ActiveLiquidity = ({ onBack, profile, fonts }) => {
 
             const outstanding = loan.principal_amount || 0;
             const monthly = (loan.amount_repayable / loan.number_of_months) || 0;
-            const progress = loan.amount_repayable > 0
-              ? Math.max(0, ((loan.amount_repayable - outstanding) / loan.amount_repayable) * 100)
+
+            // Back-calculate original principal using prime rate to detect actual payments.
+            // amount_repayable = origPrincipal + interest(prime) + initiation + service_fees
+            // Estimating: progress only shows when principal has genuinely dropped via payments.
+            const PRIME_MONTHLY = 0.105 / 12;
+            const months = loan.number_of_months || 1;
+            const totalRepayable = Number(loan.amount_repayable || 0);
+            const estServiceFees = 69 * months;
+            const estInitiation = 1050;
+            const estOriginalPrincipal = Math.max(0,
+              (totalRepayable - estInitiation - estServiceFees) / (1 + PRIME_MONTHLY * months)
+            );
+            const amountPaid = Math.max(0, estOriginalPrincipal - outstanding);
+            const progress = totalRepayable > 0
+              ? Math.min(100, (amountPaid / totalRepayable) * 100)
               : 0;
 
             // Safely parse and format the first repayment date

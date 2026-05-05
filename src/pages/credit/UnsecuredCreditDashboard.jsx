@@ -758,25 +758,43 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
           {/* Next repayment */}
           <div className="bg-white border border-slate-100 rounded-[20px] p-4 shadow-sm">
             <p className="text-[10px] text-slate-400 mb-1">Next repayment</p>
-            <p className="text-[18px] font-medium text-slate-900">{formatZar(monthlyPay)}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {nextDueDate ? `Due ${fmtDate(nextDueDate)}` : "—"}
-            </p>
-            {daysUntilDue !== null && (
-              <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 ${dueLabelColor}`}>
-                {dueLabel}
-              </span>
+            {loading ? (
+              <>
+                <div className="h-[27px] w-20 bg-slate-200 animate-pulse rounded mb-1" />
+                <div className="h-[16px] w-24 bg-slate-200 animate-pulse rounded" />
+              </>
+            ) : (
+              <>
+                <p className="text-[18px] font-medium text-slate-900">{formatZar(monthlyPay)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {nextDueDate ? `Due ${fmtDate(nextDueDate)}` : "—"}
+                </p>
+                {daysUntilDue !== null && (
+                  <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 ${dueLabelColor}`}>
+                    {dueLabel}
+                  </span>
+                )}
+              </>
             )}
           </div>
 
           {/* Interest rate */}
           <div className="bg-white border border-slate-100 rounded-[20px] p-4 shadow-sm">
             <p className="text-[10px] text-slate-400 mb-1">Interest rate</p>
-            <p className="text-[18px] font-medium text-slate-900">{monthlyRate} p.m.</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">{annualRate} over {months > 0 ? `${months} months` : "term"}</p>
-            <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 bg-emerald-50 text-emerald-700">
-              Unsecured
-            </span>
+            {loading ? (
+              <>
+                <div className="h-[27px] w-16 bg-slate-200 animate-pulse rounded mb-1" />
+                <div className="h-[16px] w-28 bg-slate-200 animate-pulse rounded" />
+              </>
+            ) : (
+              <>
+                <p className="text-[18px] font-medium text-slate-900">{monthlyRate} p.m.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{annualRate} over {months > 0 ? `${months} months` : "term"}</p>
+                <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 bg-emerald-50 text-emerald-700">
+                  Unsecured
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -784,18 +802,36 @@ const UnsecuredCreditDashboard = ({ profile, onTabChange, onOpenNotifications })
           {/* Loan term */}
           <div className="bg-white border border-slate-100 rounded-[20px] p-4 shadow-sm">
             <p className="text-[10px] text-slate-400 mb-1">Loan term</p>
-            <p className="text-[18px] font-medium text-slate-900">{months > 0 ? `${months} month${months > 1 ? "s" : ""}` : "—"}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Short-term credit</p>
-            <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 bg-violet-50 text-violet-700">
-              NCA regulated
-            </span>
+            {loading ? (
+              <>
+                <div className="h-[27px] w-16 bg-slate-200 animate-pulse rounded mb-1" />
+                <div className="h-[16px] w-24 bg-slate-200 animate-pulse rounded" />
+              </>
+            ) : (
+              <>
+                <p className="text-[18px] font-medium text-slate-900">{months > 0 ? `${months} month${months > 1 ? "s" : ""}` : "—"}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Short-term credit</p>
+                <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full mt-1.5 bg-violet-50 text-violet-700">
+                  NCA regulated
+                </span>
+              </>
+            )}
           </div>
 
           {/* Total paid */}
           <div className="bg-white border border-slate-100 rounded-[20px] p-4 shadow-sm">
             <p className="text-[10px] text-slate-400 mb-1">Total paid</p>
-            <p className="text-[18px] font-medium text-slate-900">{formatZar(totalPaid)}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">since inception</p>
+            {loading ? (
+              <>
+                <div className="h-[27px] w-20 bg-slate-200 animate-pulse rounded mb-1" />
+                <div className="h-[16px] w-24 bg-slate-200 animate-pulse rounded" />
+              </>
+            ) : (
+              <>
+                <p className="text-[18px] font-medium text-slate-900">{formatZar(totalPaid)}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">since inception</p>
+              </>
+            )}
           </div>
         </div>
 

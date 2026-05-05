@@ -57,7 +57,7 @@ export class LendingEngine {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     let currentDate = new Date(this.nextSalaryDate);
-    
+
     // 4-Day Rule Check
     if (diffDays <= 4) {
       currentDate.setMonth(currentDate.getMonth() + 1);
@@ -70,7 +70,7 @@ export class LendingEngine {
       // Ensure we hit the same day of the month
       pDate.setDate(salaryDay);
       dates.push(pDate);
-      
+
       // Move to next month
       currentDate.setMonth(currentDate.getMonth() + 1);
     }
@@ -82,7 +82,7 @@ export class LendingEngine {
     const initiationFee = this.calculateInitiationFee();
     const paymentDates = this.determinePaymentDates();
     const schedule = [];
-    
+
     let totalInterest = 0;
     let totalServiceFees = 0;
     let lastDate = new Date(this.originationDate);
@@ -115,12 +115,12 @@ export class LendingEngine {
 
     const totalRepayable = this.round(this.principal + totalInterest + totalServiceFees + initiationFee);
     const baseInstallment = Math.floor((totalRepayable / this.termMonths) * 100) / 100;
-    
+
     // Adjust last installment for rounding
     const installments = Array(this.termMonths).fill(baseInstallment);
     const currentSum = this.round(baseInstallment * this.termMonths);
     const diff = this.round(totalRepayable - currentSum);
-    
+
     if (diff !== 0) {
       installments[this.termMonths - 1] = this.round(installments[this.termMonths - 1] + diff);
     }

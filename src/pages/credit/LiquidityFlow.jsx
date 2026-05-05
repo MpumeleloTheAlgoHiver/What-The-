@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import SignaturePad from "signature_pad";
 import generateLoanAgreementPdf from "../../lib/generateLoanAgreementPdf";
 import { supabase } from "../../lib/supabase";
-import { LendingEngine } from "../../lib/LendingEngine";
+import { calculateSecuredLoan } from "./securedLoanCalc";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AUTH_PHASES = [
@@ -541,14 +541,12 @@ function StepSalaryDate({ verifiedAcc, defaultDay, termMonths: initialTerm, prin
 
   const calculation = useMemo(() => {
     if (!day) return null;
-    const engine = new LendingEngine({
-      loanType: 'securitised',
+    return calculateSecuredLoan({
       principal,
       originationDate: new Date(),
       nextSalaryDate: new Date(new Date().getFullYear(), new Date().getMonth(), parseInt(day)),
-      termMonths: term
+      termMonths: term,
     });
-    return engine.calculateLoan();
   }, [day, principal, term]);
 
   return (
