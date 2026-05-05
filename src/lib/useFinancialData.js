@@ -53,8 +53,12 @@ async function fetchServerTransactions(token, limit = 50) {
 
 let financialDataCache = null;
 
+export const clearFinancialDataCache = () => {
+  financialDataCache = null;
+};
+
 export const useFinancialData = () => {
-  const [data, setData] = useState(financialDataCache || {
+  const [data, setData] = useState({
     balance: 0,
     investments: 0,
     availableCredit: 0,
@@ -144,9 +148,11 @@ export const useFinancialData = () => {
         loading: false,
         error: null,
       };
-      
+
       financialDataCache = newData;
       setData(newData);
+
+      console.log("[useFinancialData] Updated balance from DB:", walletBalance);
     } catch (err) {
       console.error("Error fetching financial data:", err);
       setData((prev) => ({

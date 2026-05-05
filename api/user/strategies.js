@@ -26,43 +26,7 @@ export default async function handler(req, res) {
     const db = supabaseAdmin || supabase;
     const userId = user.id;
 
-    const { data: transactions, error: txError } = await db
-      .from("transactions")
-      .select("id, name, amount, direction, transaction_date, created_at")
-      .eq("user_id", userId)
-      .eq("direction", "debit");
-
-    if (txError) {
-      console.error("[user/strategies] Error fetching transactions:", txError);
-      return res.status(500).json({ success: false, error: txError.message });
-    }
-
-    const strategyFirstDate = {};
-    const strategyTxNames = new Set();
-    for (const tx of (transactions || [])) {
-      const txName = (tx.name || "").trim();
-      let strategyName = null;
-      if (txName.startsWith("Strategy Investment: ")) {
-        strategyName = txName.replace("Strategy Investment: ", "").trim();
-      } else if (txName.startsWith("Purchased ")) {
-        strategyName = txName.replace("Purchased ", "").trim();
-      }
-      if (strategyName) {
-        strategyTxNames.add(strategyName);
-        const txDate = tx.transaction_date || (tx.created_at ? tx.created_at.slice(0, 10) : null);
-        if (txDate) {
-          if (!strategyFirstDate[strategyName] || txDate < strategyFirstDate[strategyName]) {
-            strategyFirstDate[strategyName] = txDate;
-          }
-        }
-      }
-    }
-
-    const strategyNames = Array.from(strategyTxNames);
-    if (strategyNames.length === 0) {
-      return res.status(200).json({ success: true, strategies: [] });
-    }
-
+    // Fetch user's active holdings to determine which strategies they own
     const { data: userHoldings, error: holdingsError } = await db
       .from("stock_holdings_c")
       .select("id, security_id, strategy_id, quantity, avg_fill")
@@ -72,6 +36,11 @@ export default async function handler(req, res) {
 
     if (holdingsError) {
       console.error("[user/strategies] Error fetching user holdings:", holdingsError);
+    }
+
+    // If user has no holdings, return empty strategies list
+    if (!userHoldings || userHoldings.length === 0) {
+      return res.status(200).json({ success: true, strategies: [] });
     }
 
     const holdingsByStrategyId = {};
@@ -183,13 +152,10 @@ export default async function handler(req, res) {
     const matchedStrategies = [];
     for (const strategy of allStrategies) {
       const hasHoldingsForStrategy = (holdingsByStrategyId[strategy.id] || []).length > 0;
-      const matchKey = strategyNames.find(sn =>
-        sn.toLowerCase() === (strategy.name || "").toLowerCase() ||
-        sn.toLowerCase() === (strategy.short_name || "").toLowerCase()
-      );
       const isLinkedFromHoldings = strategyIdsFromHoldings.includes(strategy.id);
 
-      if (matchKey || hasHoldingsForStrategy || isLinkedFromHoldings) {
+      // Only include strategy if user has active holdings for it
+      if (hasHoldingsForStrategy || isLinkedFromHoldings) {
         const metrics = strategy.strategy_metrics;
         const latestMetric = Array.isArray(metrics) ? metrics[0] : metrics;
         const enrichedHoldings = (strategy.holdings || []).map(h => {
@@ -209,29 +175,12 @@ export default async function handler(req, res) {
         let investedAmount = 0;
         let currentMarketValue = 0;
 
-        if (stratHoldings.length === 0) {
-          // No holdings allocated yet — compute invested amount from transactions
-          for (const tx of (transactions || [])) {
-            const txName = (tx.name || "").trim();
-            let txStratName = null;
-            if (txName.startsWith("Strategy Investment: ")) txStratName = txName.replace("Strategy Investment: ", "").trim();
-            else if (txName.startsWith("Purchased ")) txStratName = txName.replace("Purchased ", "").trim();
-            if (txStratName && (
-              txStratName.toLowerCase() === (strategy.name || "").toLowerCase() ||
-              txStratName.toLowerCase() === (strategy.short_name || "").toLowerCase()
-            )) {
-              investedAmount += Number(tx.amount || 0) / 100;
-            }
-          }
-          currentMarketValue = investedAmount;
-        } else {
-          for (const h of stratHoldings) {
-            const qty = Number(h.quantity || 0);
-            const avgFill = Number(h.avg_fill || 0);
-            const livePrice = livePriceMap[h.security_id] || avgFill;
-            investedAmount += (avgFill * qty) / 100;
-            currentMarketValue += (livePrice * qty) / 100;
-          }
+        for (const h of stratHoldings) {
+          const qty = Number(h.quantity || 0);
+          const avgFill = Number(h.avg_fill || 0);
+          const livePrice = livePriceMap[h.security_id] || avgFill;
+          investedAmount += (avgFill * qty) / 100;
+          currentMarketValue += (livePrice * qty) / 100;
         }
 
         console.log(`[user/strategies] Strategy ${strategy.name}: investedAmount=${investedAmount.toFixed(2)}, currentMarketValue=${currentMarketValue.toFixed(2)}`);
@@ -250,7 +199,7 @@ export default async function handler(req, res) {
           currentMarketValue,
           currentValue: currentMarketValue,
           metrics: latestMetric || null,
-          firstInvestedDate: matchKey ? (strategyFirstDate[matchKey] || null) : null,
+          firstInvestedDate: null,
         });
       }
     }

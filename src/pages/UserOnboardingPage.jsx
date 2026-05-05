@@ -64,6 +64,12 @@ const BankIcon = (props) => (
   </svg>
 );
 
+const CheckCircleIcon = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+);
+
 const southAfricanBanks = [
   { value: "", label: "Select your bank", logo: null, branchCode: "" },
   { value: "absa", label: "Absa Bank", logo: "https://logo.clearbit.com/absa.co.za", branchCode: "632005" },
@@ -160,6 +166,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
   const bankDropdownRef = useRef(null);
   const [kycAlreadyVerified, setKycAlreadyVerified] = useState(false);
+  const [kycVerificationDone, setKycVerificationDone] = useState(false);
   const [bankDone, setBankDone] = useState(false);
   const [bankLetterDone, setBankLetterDone] = useState(false);
   const [mandateDone, setMandateDone] = useState(false);
@@ -171,6 +178,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
   const [addressDone, setAddressDone] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const [termsDone, setTermsDone] = useState(false);
+  const [agreementSignedDone, setAgreementSignedDone] = useState(false);
   const [authStatus, setAuthStatus] = useState({
     isChecked: false,
     isAuthenticated: false,
@@ -261,7 +269,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
     const identityCheckDone = !!existingOnboardingId || kycAlreadyVerified;
     const steps = [
       { step: 1, done: identityCheckDone },
-      { step: 2, done: true },
+      { step: 2, done: kycVerificationDone },
       { step: 3, done: addressDone },
       { step: 4, done: taxDone },
       { step: 5, done: bankDone },
@@ -600,7 +608,6 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
   useEffect(() => {
     const checkKycStatus = async () => {
       try {
-        // No apiBase prefix to force relative path
       const { data: userData } = await supabase.auth.getUser();
         const userId = userData?.user?.id;
         if (!userId) return;
@@ -612,7 +619,38 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
         const data = await res.json();
         if (data.success && data.status === "verified") {
           setKycAlreadyVerified(true);
-          if (step === 2) setShowProceed(true);
+          setKycVerificationDone(true);
+
+          if (step === 2) {
+            setShowProceed(true);
+
+            try {
+              const { data: packData } = await supabase
+                .from("user_onboarding_pack_details")
+                .select("pack_details")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+              if (packData?.pack_details) {
+                const packDetail = packData.pack_details;
+                const idDocs = Array.isArray(packDetail?.info?.idDocs) ? packDetail.info.idDocs : [];
+                const idDoc = idDocs.find(d => d.number && (d.idDocType === "ID_CARD" || d.idDocType === "PASSPORT" || d.idDocType === "DRIVERS"));
+
+                if (idDoc?.number) {
+                  setIdentityNumber(idDoc.number);
+                }
+              }
+
+              setTimeout(() => {
+                goToStep(getNextIncompleteStep(2));
+              }, 500);
+            } catch (e) {
+              console.error("Failed to extract ID from sumsub:", e);
+              setTimeout(() => {
+                goToStep(getNextIncompleteStep(2));
+              }, 500);
+            }
+          }
         }
       } catch {
       }
@@ -706,6 +744,7 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
       console.error("Failed to update KYC status:", err);
     }
 
+    setAgreementSignedDone(true);
     if (onComplete) onComplete();
   };
 
@@ -874,27 +913,10 @@ const OnboardingProcessPage = ({ onBack, onComplete }) => {
               </div>
             </div>
           ) : step === 2 ? (
-            <div className="w-full max-w-xl mx-auto">
-              <div className="text-center mb-8 animate-fade-in delay-1">
-                <p className="text-xs uppercase tracking-[0.2em] mb-2" style={{ color: "hsl(270 20% 55%)" }}>
-                  Step 2 of 11
-                </p>
-                <div className="hero-icon">
-                  <CheckCircleIcon width={48} height={48} />
-                </div>
-                <h2 className="text-3xl font-light tracking-tight mb-2" style={{ color: "hsl(270 30% 25%)" }}>
-                  KYC Verification
-                </h2>
-                <p className="text-sm" style={{ color: "hsl(270 20% 50%)" }}>
-                  Verifying your identity...
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center">
-                  <div className="animate-spin h-8 w-8 border-4 border-violet-200 border-t-violet-600 rounded-full"></div>
-                </div>
-              </div>
-            </div>
+            <SumsubVerification onVerified={() => {
+              setKycVerificationDone(true);
+              goToStep(getNextIncompleteStep(2));
+            }} />
           ) : step === 3 ? (
             <div className="w-full max-w-xl mx-auto">
               <div className="text-center mb-8 animate-fade-in delay-1">

@@ -288,6 +288,18 @@ const SwipeableBalanceCard = ({
           0,
         );
 
+        console.log("[SwipeableBalanceCard] Loaded holdings:", {
+          count: enrichedHoldings.length,
+          totalMarketValue: mValue,
+          holdings: enrichedHoldings.map(h => ({
+            symbol: h.symbol,
+            market_value: h.market_value,
+            security_id: h.security_id,
+            strategy_id: h.strategy_id,
+            quantity: h.quantity,
+            avg_fill: h.avg_fill
+          }))
+        });
 
         setDbData({
           holdings: enrichedHoldings,
@@ -546,7 +558,7 @@ const SwipeableBalanceCard = ({
               .eq("strategy_id", asset.strategyId)
               .order("as_of_date", { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle();
 
             if (!error && data) {
               const pnlValue = data[columns.pnl] || 0;
@@ -557,6 +569,9 @@ const SwipeableBalanceCard = ({
                 pct: Number(pctValue)
               });
               setLatestBasketValue(basketValue);
+            } else {
+              setLatestBasketValue(0);
+              setReturnData5d({ pnl: 0, pct: 0 });
             }
           } else if (asset.security_id) {
             const { data, error } = await supabase
@@ -576,6 +591,9 @@ const SwipeableBalanceCard = ({
                 pct: Number(pctValue)
               });
               setLatestBasketValue(basketValue);
+            } else {
+              setLatestBasketValue(0);
+              setReturnData5d({ pnl: 0, pct: 0 });
             }
           }
         } else if (dbData.holdings.length > 0) {
@@ -603,7 +621,7 @@ const SwipeableBalanceCard = ({
                 .eq("strategy_id", strategyId)
                 .order("as_of_date", { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
 
               if (!err && row) {
                 const pnlValue = row[columns.pnl] || 0;
