@@ -46,6 +46,43 @@ function maskEmail(email) {
   return `${local.length > 1 ? local[0] + "***" : "***"}@${domain}`;
 }
 
+function buildChildAddedHtml(parentName, childName, dob) {
+  const dobFormatted = dob ? new Date(dob).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" }) : "";
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f8f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<div style="max-width:480px;margin:0 auto;padding:40px 24px;">
+  <div style="background:white;border-radius:24px;padding:40px 32px;">
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="font-size:28px;font-weight:800;color:#1e1b4b;margin-bottom:4px;">mint</div>
+      <div style="color:#94a3b8;font-size:13px;">Family Investing</div>
+    </div>
+    <p style="color:#334155;font-size:15px;line-height:1.6;margin-bottom:8px;">Hi ${parentName},</p>
+    <p style="color:#334155;font-size:15px;line-height:1.6;margin-bottom:24px;">
+      You've successfully added <strong>${childName}</strong> (born ${dobFormatted}) to your Mint family account. 🎉
+    </p>
+    <div style="background:#f0f4ff;border-radius:16px;padding:20px 24px;margin-bottom:24px;">
+      <p style="color:#1e1b4b;font-size:14px;font-weight:700;margin:0 0 8px;">Start investing for ${childName}</p>
+      <p style="color:#475569;font-size:13px;line-height:1.6;margin:0;">
+        Mint has child-friendly investment strategies designed to grow wealth for your little one.
+        Simply transfer funds into ${childName}'s wallet and choose a strategy to start building their future today.
+      </p>
+    </div>
+    <p style="color:#334155;font-size:13px;line-height:1.6;margin-bottom:24px;">
+      <strong>Here's how to get started:</strong><br>
+      1. Go to your Family Dashboard<br>
+      2. Tap on ${childName}'s account<br>
+      3. Transfer funds into their wallet<br>
+      4. Browse and invest in a child-friendly strategy
+    </p>
+    <div style="text-align:center;">
+      <a href="https://mymint.co.za" style="display:inline-block;background:linear-gradient(135deg,#1e1b4b,#312e81);color:white;padding:14px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:15px;">Go to Mint</a>
+    </div>
+    <p style="color:#94a3b8;font-size:11px;text-align:center;margin-top:24px;">Mint — Smart investing for South African families</p>
+  </div>
+</div></body></html>`;
+}
+
 function buildInviteHtml(inviterName) {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
@@ -387,6 +424,7 @@ export default async function handler(req, res) {
           .select()
           .single();
 
+        let newMember;
         if (e1) {
           // Graceful fallback: strip unknown columns one by one
           const { data: d2, error: e2 } = await db
@@ -401,12 +439,39 @@ export default async function handler(req, res) {
               .select()
               .single();
             if (e3) throw e3;
-            return res.status(201).json({ member: d3 });
+            newMember = d3;
           } else if (e2) { throw e2; }
-          return res.status(201).json({ member: d2 });
+          else { newMember = d2; }
+        } else {
+          newMember = d1;
         }
 
-        return res.status(201).json({ member: d1 });
+        // Send child-added email to parent
+        const resend = getResend();
+        if (resend) {
+          try {
+            const { data: parentProfile } = await db
+              .from("profiles")
+              .select("first_name, last_name, email")
+              .eq("id", primary_user_id)
+              .maybeSingle();
+
+            const parentEmail = parentProfile?.email;
+            if (parentEmail) {
+              const parentName = [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") || "there";
+              await resend.emails.send({
+                from: "Mint <noreply@mymint.co.za>",
+                to: [parentEmail],
+                subject: `${first_name.trim()} has been added to your Mint family account`,
+                html: buildChildAddedHtml(parentName, first_name.trim(), date_of_birth),
+              });
+            }
+          } catch (emailErr) {
+            console.error("[family] Child-added email failed:", emailErr.message);
+          }
+        }
+
+        return res.status(201).json({ member: newMember });
       }
     } catch (e) {
       console.error("[family] POST error:", e.message);
