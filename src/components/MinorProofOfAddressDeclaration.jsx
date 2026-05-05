@@ -18,8 +18,6 @@ const LABEL_CLR     = [100, 116, 139];     // Slate-500
 const VALUE_CLR     = [30, 41, 59];        // Slate-800
 const WHITE         = [255, 255, 255];
 
-const MINT_LOGO_URL =
-  "https://mfxnghmuccevsxwcetej.supabase.co/storage/v1/object/public/Mint%20Assets/tMOmeIOo4KE20Yh1bIuk8PFMlFHZ421rVESa2dcn.jpg";
 const CEO_SIGNATURE_URL = "/assets/ceo-signature.png";
 
 const PAGE_W  = 210;
@@ -108,7 +106,7 @@ function drawSectionHeading(doc, y, title) {
 }
 
 // ─── Rich branded header ──────────────────────────────────────────────────────
-function addPageHeader(doc, logoB64, pageNum, totalPages) {
+function addPageHeader(doc, pageNum, totalPages) {
   // White background
   doc.setFillColor(...WHITE);
   doc.rect(0, 0, PAGE_W, PAGE_H, "F");
@@ -129,24 +127,15 @@ function addPageHeader(doc, logoB64, pageNum, totalPages) {
   doc.circle(18, 5, 22, "F");
   doc.setGState(doc.GState({ opacity: 1 }));
 
-  // ── Mint logo, centred vertically in band ──
-  if (logoB64?.data) {
-    const aspect = logoB64.width / logoB64.height;
-    const lh = 14, lw = lh * aspect;
-    const lx = MARGIN;
-    const ly = (HEADER_H - lh) / 2;
-    doc.addImage(logoB64.data, "JPEG", lx, ly, lw, lh, undefined, "FAST");
-  }
-
-  // Company name next to logo
+  // ── Mint wordmark ──
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(18);
   doc.setTextColor(...WHITE);
-  doc.text("Mint", MARGIN + 26, HEADER_H / 2 - 1);
+  doc.text("MINT", MARGIN, HEADER_H / 2 + 1);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...MINT_LIGHT);
-  doc.text("Financial Services (Pty) Ltd  ·  FSP No. 55118", MARGIN + 26, HEADER_H / 2 + 5);
+  doc.text("Financial Services (Pty) Ltd  ·  FSP No. 55118", MARGIN, HEADER_H / 2 + 6.5);
 
   // "CONFIDENTIAL" badge top-right
   doc.setFillColor(255, 255, 255);
@@ -220,8 +209,7 @@ function addCeoSignature(doc, ceoSigB64, y) {
 
 async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childData, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [logoB64, ceoSigB64] = await Promise.all([
-    fetchImageBase64(MINT_LOGO_URL),
+  const [ceoSigB64] = await Promise.all([
     fetchImageBase64(CEO_SIGNATURE_URL),
   ]);
 
@@ -237,7 +225,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
   });
   const allGuardianNames = [parentName, ...coGuardianProfiles.map(g => [g.firstName, g.lastName].filter(Boolean).join(" "))].join(" and ");
 
-  addPageHeader(doc, logoB64, 1, 1);
+  addPageHeader(doc, 1, 1);
 
   let y = HEADER_H + 9;
 
@@ -321,7 +309,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
 
   if (y > PAGE_H - 110) {
     doc.addPage();
-    addPageHeader(doc, logoB64, 2, 2);
+    addPageHeader(doc, 2, 2);
     y = MARGIN + 20;
   }
 
@@ -377,8 +365,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
 
 async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, childData, childAddress, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [logoB64, ceoSigB64] = await Promise.all([
-    fetchImageBase64(MINT_LOGO_URL),
+  const [ceoSigB64] = await Promise.all([
     fetchImageBase64(CEO_SIGNATURE_URL),
   ]);
 
@@ -395,7 +382,7 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
   const fullChildAddress = [childAddress.line1, childAddress.suburb, childAddress.city, childAddress.province, childAddress.postalCode].filter(Boolean).join(", ");
   const allGuardianNames = [parentName, ...coGuardianProfiles.map(g => [g.firstName, g.lastName].filter(Boolean).join(" "))].join(" and ");
 
-  addPageHeader(doc, logoB64, 1, 1);
+  addPageHeader(doc, 1, 1);
 
   let y = HEADER_H + 9;
 
@@ -472,7 +459,7 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
 
   if (y > PAGE_H - 110) {
     doc.addPage();
-    addPageHeader(doc, logoB64, 2, 2);
+    addPageHeader(doc, 2, 2);
     y = MARGIN + 20;
   }
 
@@ -778,12 +765,12 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
 
         {/* Signature box */}
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
             <div className="p-2 rounded-lg" style={{ background: P_CARD }}>
               <PenTool className="h-4 w-4" style={{ color: PURPLE }} />
             </div>
             Sign here to declare
-          </p>
+          </div>
           <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white overflow-hidden shadow-sm" style={{ touchAction: "none" }}>
             <canvas ref={sameCanvasRef} width={340} height={110} className="w-full" style={{ display: "block" }} />
           </div>
@@ -925,12 +912,12 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
 
         {/* Signature box */}
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
             <div className="p-2 rounded-lg" style={{ background: P_CARD }}>
               <PenTool className="h-4 w-4" style={{ color: PURPLE }} />
             </div>
             Sign here to declare
-          </p>
+          </div>
           <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white overflow-hidden shadow-sm" style={{ touchAction: "none" }}>
             <canvas ref={diffCanvasRef} width={340} height={110} className="w-full" style={{ display: "block" }} />
           </div>

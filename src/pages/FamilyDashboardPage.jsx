@@ -539,7 +539,7 @@ function AddMemberModal({ type, userId, profile, coGuardians = [], onSave, onClo
   /* ── render ── */
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -548,20 +548,15 @@ function AddMemberModal({ type, userId, profile, coGuardians = [], onSave, onClo
       {/* Backdrop */}
       <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={saving ? undefined : onClose} />
 
-      {/* Sheet */}
+      {/* Modal */}
       <motion.div
-        className="relative w-full max-w-md bg-white rounded-t-[32px] shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom)]"
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
+        className="relative w-full max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
         transition={{ type: "spring", stiffness: 380, damping: 38 }}
       >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3.5 pb-2">
-          <div className="h-1 w-9 rounded-full bg-slate-200" />
-        </div>
-
-        <div className="px-6 pt-2 pb-10">
+        <div className="px-6 pt-6 pb-10">
 
           {/* ═══════════════ SPOUSE: selection screen ═══════════════ */}
           {isSpouse && !spouseResult && spouseMode === null && (

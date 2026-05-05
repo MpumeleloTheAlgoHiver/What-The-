@@ -88,6 +88,8 @@ const HomePage = ({
   const [userId, setUserId] = useState(null);
   const [localBestAssets, setLocalBestAssets] = useState([]);
   const [hasAnyHoldings, setHasAnyHoldings] = useState(false);
+  const [loadingBestAssets, setLoadingBestAssets] = useState(true);
+  const [loadingBestStrategies, setLoadingBestStrategies] = useState(true);
   const { onboardingComplete, loading: onboardingLoading, refetch: fetchOnboardingStatus } = useOnboardingStatus();
   const onboardingChecked = !onboardingLoading;
 
@@ -117,6 +119,7 @@ const HomePage = ({
 
   const fetchBestAssets = React.useCallback(async () => {
     if (!profile?.id) return;
+    setLoadingBestAssets(true);
     try {
       const { data: holdings, error: holdingsError } = await supabase
         .from('stock_holdings_c')
@@ -181,7 +184,7 @@ const HomePage = ({
             };
           });
 
-        const profitable = formatted.filter(a => !a.isPending && a.pnlPct > 0).sort((a, b) => b.pnlPct - a.pnlPct);
+        const profitable = formatted.filter(a => !a.isPending).sort((a, b) => b.pnlPct - a.pnlPct);
         const pending = formatted.filter(a => a.isPending);
         const sorted = [...profitable, ...pending].slice(0, 5);
         setLocalBestAssets(sorted);
@@ -223,7 +226,7 @@ const HomePage = ({
               };
             });
 
-          const profitable = formatted.filter(a => !a.isPending && a.pnlPct > 0).sort((a, b) => b.pnlPct - a.pnlPct);
+          const profitable = formatted.filter(a => !a.isPending).sort((a, b) => b.pnlPct - a.pnlPct);
           const ranked = profitable.slice(0, 5);
           if (ranked.length > 0) {
             setLocalBestAssets(ranked);
@@ -269,6 +272,8 @@ const HomePage = ({
       }
     } catch (e) {
       console.error("Asset fetch error:", e.message);
+    } finally {
+      setLoadingBestAssets(false);
     }
   }, [profile?.id]);
 
@@ -382,9 +387,9 @@ const HomePage = ({
 
   useEffect(() => {
     const fetchStrategies = async () => {
+      if (!profile?.id) return;
+      setLoadingBestStrategies(true);
       try {
-        if (!profile?.id) return;
-
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (!token) {
@@ -416,7 +421,6 @@ const HomePage = ({
           const isPending = invested === 0 && currentValue === 0;
           const stratPnlRands = currentValue - invested;
           const changePctVal = invested > 0 ? (stratPnlRands / invested) * 100 : 0;
-          const stratPnlPct = changePctVal;
           return {
             id: s.id,
             name: s.name,
@@ -432,7 +436,7 @@ const HomePage = ({
             isPending,
             change_pct: changePctVal,
             pnlRands: stratPnlRands,
-            pnlPct: stratPnlPct,
+            pnlPct: changePctVal,
             strategy_metrics: s.metrics ? [s.metrics] : [],
           };
         });
@@ -444,6 +448,8 @@ const HomePage = ({
       } catch (error) {
         console.error("Failed to load strategies", error);
         setBestStrategies([]);
+      } finally {
+        setLoadingBestStrategies(false);
       }
     };
     fetchStrategies();
@@ -673,7 +679,7 @@ const HomePage = ({
     }
   };
 
-  const hasProfitableAssets = assetsToDisplay.length > 0;
+  const hasAssets = assetsToDisplay.length > 0;
   const hasInvestments = hasAnyHoldings || assetsToDisplay.length > 0;
   const hasStrategies = bestStrategies && bestStrategies.length > 0;
 
@@ -946,11 +952,9 @@ const HomePage = ({
 
         {/* Best Performing Assets */}
         <section>
-          <div className="flex items-end justify-between px-5 mb-3">
+          <div className="flex items-end justify-between mb-3">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-900">
-                Your best performing assets
-              </p>
+              <p className="text-sm font-semibold text-slate-900">Your best performing assets</p>
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500">
                   <Info className="h-3 w-3" />
@@ -958,28 +962,39 @@ const HomePage = ({
                 <span>Based on your investment portfolio</span>
               </div>
             </div>
-            {hasInvestments && (
-              <button
-                onClick={onOpenInvestments}
-                className="mb-1 text-xs font-semibold text-violet-600 active:opacity-70 transition-colors"
-              >
+            {hasInvestments && !loadingBestAssets && (
+              <button onClick={onOpenInvestments} className="mb-1 text-xs font-semibold text-violet-600 active:opacity-70 transition-colors">
                 View all
               </button>
             )}
           </div>
 
-          {hasProfitableAssets ? (
-            <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {loadingBestAssets ? (
+            <div className="flex gap-3 overflow-hidden pb-1">
+              {[0, 1].map((i) => (
+                <div key={i} className="flex min-w-[260px] flex-shrink-0 items-center gap-4 rounded-3xl bg-white p-4 shadow-md">
+                  <Skeleton className="h-12 w-12 rounded-2xl flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-3 w-14" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : hasAssets ? (
+            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {assetsToDisplay.slice(0, 5).map((asset) => (
                 <div
                   key={asset.symbol}
-                  className="flex min-w-[260px] flex-1 snap-start items-center gap-4 rounded-3xl bg-white p-4 shadow-md"
+                  className="flex min-w-[260px] flex-shrink-0 snap-start items-center gap-4 rounded-3xl bg-white p-4 shadow-md"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100">
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100">
                     {failedLogos[asset.symbol] || !asset.logo ? (
-                      <span className="text-sm font-semibold text-slate-600">
-                        {asset.symbol}
-                      </span>
+                      <span className="text-xs font-bold text-slate-600">{asset.symbol?.substring(0, 3)}</span>
                     ) : (
                       <img
                         src={asset.logo}
@@ -987,9 +1002,7 @@ const HomePage = ({
                         className="h-10 w-10 object-contain"
                         referrerPolicy="no-referrer"
                         crossOrigin="anonymous"
-                        onError={() =>
-                          setFailedLogos((prev) => ({ ...prev, [asset.symbol]: true }))
-                        }
+                        onError={() => setFailedLogos((prev) => ({ ...prev, [asset.symbol]: true }))}
                       />
                     )}
                   </div>
@@ -1026,35 +1039,26 @@ const HomePage = ({
               <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-full bg-violet-50 text-violet-600 mb-4">
                 <TrendingUp className="h-8 w-8" />
               </div>
-              {hasInvestments ? (
-                <>
-                  <p className="text-sm font-semibold text-slate-900 mb-1">No profitable assets yet</p>
-                  <p className="text-xs text-slate-500">Your best performers will appear here once any of your assets are in profit.</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-semibold text-slate-900 mb-1">No investments yet</p>
-                  <p className="text-xs text-slate-500 mb-4">Start investing to see your best performing assets here</p>
-                  <button
-                    type="button"
-                    onClick={() => onOpenInvest && onOpenInvest("invest")}
-                    className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.15em] text-white shadow-lg shadow-slate-900/20 transition hover:-translate-y-0.5"
-                  >
-                    Make your first investment
-                  </button>
-                </>
-              )}
+              <>
+                <p className="text-sm font-semibold text-slate-900 mb-1">No investments yet</p>
+                <p className="text-xs text-slate-500 mb-4">Start investing to see your best performing assets here</p>
+                <button
+                  type="button"
+                  onClick={() => onOpenInvest && onOpenInvest("invest")}
+                  className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.15em] text-white shadow-lg shadow-slate-900/20 transition hover:-translate-y-0.5"
+                >
+                  Make your first investment
+                </button>
+              </>
             </div>
           )}
         </section>
 
         {/* Best Performing Strategies */}
         <section>
-          <div className="flex items-end justify-between px-5 mb-3">
+          <div className="flex items-end justify-between mb-3">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-900">
-                Your best performing strategies
-              </p>
+              <p className="text-sm font-semibold text-slate-900">Your best performing strategies</p>
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500">
                   <LayoutGrid className="h-3 w-3" />
@@ -1062,70 +1066,84 @@ const HomePage = ({
                 <span>Top performing curated portfolios</span>
               </div>
             </div>
-            {hasStrategies && (
-              <button
-                onClick={onOpenStrategies}
-                className="mb-1 text-xs font-semibold text-violet-600 active:opacity-70 transition-colors"
-              >
+            {hasStrategies && !loadingBestStrategies && (
+              <button onClick={onOpenStrategies} className="mb-1 text-xs font-semibold text-violet-600 active:opacity-70 transition-colors">
                 View all
               </button>
             )}
           </div>
 
-          {hasStrategies ? (
-            <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {loadingBestStrategies ? (
+            <div className="flex gap-3 overflow-hidden pb-1">
+              {[0, 1].map((i) => (
+                <div key={i} className="flex-shrink-0 w-[280px] rounded-3xl bg-white p-4 shadow-md space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <div className="space-y-2 text-right">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                    <div className="flex -space-x-2">
+                      {[0, 1, 2].map((j) => <Skeleton key={j} className="h-7 w-7 rounded-full ring-2 ring-white" />)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : hasStrategies ? (
+            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {bestStrategies.slice(0, 5).map((strategy) => {
                 const holdingsSnapshot = getStrategyHoldingsSnapshot(strategy, holdingsBySymbol);
                 const pct = strategy.change_pct || 0;
+                const displayValue = strategy.currentValue || strategy.investedAmount || 0;
                 return (
                   <button
                     key={strategy.id}
                     type="button"
                     onClick={() => onOpenStrategyInPortfolio ? onOpenStrategyInPortfolio(strategy.id) : onOpenStrategies && onOpenStrategies(strategy)}
-                    className="flex-shrink-0 w-[280px] snap-start rounded-3xl border border-slate-100/80 bg-white/90 backdrop-blur-sm p-4 text-left shadow-[0_2px_16px_-2px_rgba(0,0,0,0.08)] transition-all active:scale-[0.97]"
+                    className="flex-shrink-0 w-[280px] snap-start rounded-3xl border border-slate-100/80 bg-white p-4 text-left shadow-[0_2px_16px_-2px_rgba(0,0,0,0.08)] transition-all active:scale-[0.97]"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 flex items-start justify-between gap-4">
-                        <div className="text-left space-y-1 min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">{strategy.name}</p>
-                          <p className="text-xs text-slate-600 line-clamp-1">
-                            {strategy.risk_level || 'Balanced'}{strategy.objective ? ` • ${strategy.objective}` : ''}
-                          </p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          {strategy.isPending ? (
-                            <SettlementBadge status="pending" size="sm" />
-                          ) : (
-                            <>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {strategy.currentValue ? `R${strategy.currentValue.toFixed(2)}` : strategy.investedAmount ? `R${strategy.investedAmount.toFixed(2)}` : '—'}
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div className="text-left space-y-0.5 min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{strategy.name}</p>
+                        <p className="text-xs text-slate-500">{strategy.risk_level || 'Balanced'}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {strategy.isPending ? (
+                          <SettlementBadge status="pending" size="sm" />
+                        ) : (
+                          <>
+                            <p className="text-sm font-semibold text-slate-900">
+                              R{displayValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            {strategy.pnlRands != null && strategy.investedAmount > 0 ? (
+                              <p className={`text-xs font-semibold ${strategy.pnlRands >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {strategy.pnlRands >= 0 ? '+' : ''}R{Math.abs(strategy.pnlRands).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({strategy.pnlPct >= 0 ? '+' : ''}{strategy.pnlPct.toFixed(2)}%)
                               </p>
-                              {strategy.pnlRands != null && strategy.investedAmount > 0 ? (
-                                <p className={`text-xs font-semibold ${strategy.pnlRands >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                  {strategy.pnlRands >= 0 ? '+' : ''}R{Math.abs(strategy.pnlRands).toFixed(2)} ({strategy.pnlPct >= 0 ? '+' : ''}{strategy.pnlPct.toFixed(2)}%)
-                                </p>
-                              ) : (
-                                <p className={`text-xs font-semibold ${pct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                  {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-                                </p>
-                              )}
-                            </>
-                          )}
-                        </div>
+                            ) : (
+                              <p className={`text-xs font-semibold ${pct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                              </p>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between">
-                      {strategy.risk_level && (
+                    <div className="flex items-center justify-between">
+                      {strategy.risk_level ? (
                         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">{strategy.risk_level}</span>
-                      )}
+                      ) : <span />}
                       {holdingsSnapshot.length > 0 && (
                         <div className="flex items-center gap-2">
                           <div className="flex -space-x-2">
                             {holdingsSnapshot.slice(0, 3).map((h) => (
-                              <div
-                                key={`${strategy.id}-${h.id || h.symbol}-snap`}
-                                className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-white bg-white shadow-sm"
-                              >
+                              <div key={`${strategy.id}-${h.id || h.symbol}-snap`} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
                                 {h.logo_url ? (
                                   <img src={h.logo_url} alt={h.name} className="h-full w-full object-cover" />
                                 ) : (
@@ -1136,7 +1154,7 @@ const HomePage = ({
                               </div>
                             ))}
                             {holdingsSnapshot.length > 3 && (
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-500">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[10px] font-semibold text-slate-500">
                                 +{holdingsSnapshot.length - 3}
                               </div>
                             )}
