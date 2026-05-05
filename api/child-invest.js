@@ -71,13 +71,14 @@ export default async function handler(req, res) {
     // 3. Fetch strategy + holdings
     const { data: strategy, error: stratErr } = await db
       .from("strategies_c")
-      .select("id, name, holdings, min_investment, is_active")
+      .select("id, name, holdings, min_investment, status, is_kid_strategy")
       .eq("id", strategy_id)
       .maybeSingle();
 
     if (stratErr) throw stratErr;
     if (!strategy) return res.status(404).json({ error: "Strategy not found." });
-    if (!strategy.is_active) return res.status(400).json({ error: "This strategy is no longer active." });
+    if (strategy.status !== "active") return res.status(400).json({ error: "This strategy is no longer active." });
+    if (!strategy.is_kid_strategy) return res.status(400).json({ error: "This strategy is not available for child accounts." });
     if (strategy.min_investment && amount < strategy.min_investment) {
       return res.status(400).json({ error: `Minimum investment is R${(strategy.min_investment / 100).toFixed(2)}.` });
     }

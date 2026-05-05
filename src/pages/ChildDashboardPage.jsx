@@ -258,7 +258,8 @@ function InvestModal({ child, onInvest, onClose }) {
       const { data } = await supabase
         .from("strategies_c")
         .select("id, name, description, risk_level, min_investment, is_featured, strategy_metrics(*)")
-        .eq("is_active", true)
+        .eq("status", "active")
+        .eq("is_kid_strategy", true)
         .order("is_featured", { ascending: false })
         .order("name")
         .order("as_of_date", { foreignTable: "strategy_metrics", ascending: false })
@@ -549,8 +550,8 @@ function InvestModal({ child, onInvest, onClose }) {
 
 function HoldingRow({ holding }) {
   const isUp = (holding.unrealized_pnl || 0) >= 0;
-  const securitySymbol = holding.securities?.symbol || `SEC-${String(holding.security_id || "").slice(0, 6)}`;
-  const securityName = holding.securities?.name || "Security";
+  const securitySymbol = holding.symbol || `SEC-${String(holding.security_id || "").slice(0, 6)}`;
+  const securityName = holding.name || "Security";
   return (
     <div className="flex items-center gap-3.5 rounded-xl shadow-lg border border-slate-200 p-4 bg-white">
       <div
@@ -937,8 +938,9 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
       if (!supabase) return;
       const { data } = await supabase
         .from("stock_holdings_c")
-        .select("id, security_id, quantity, avg_fill, market_value, unrealized_pnl, strategy_id, securities(symbol, name)")
+        .select("id, security_id, quantity, avg_fill, market_value, unrealized_pnl, strategy_id, symbol, name, logo_url")
         .eq("family_member_id", child.id)
+        .eq("Status", "active")
         .order("market_value", { ascending: false });
       if (isMounted.current) setHoldings(data || []);
     } catch (e) { console.error("[child-dash] holdings", e); }
