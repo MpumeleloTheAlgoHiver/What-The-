@@ -1,33 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
 import { parseOnboardingFlags } from "./checkOnboardingComplete";
 
-const singleton = {
-  channel: null,
-  listeners: new Set(),
-  isComplete: false,
-  isLoading: true,
-  error: null,
-};
-
-function notifyListeners() {
-  singleton.listeners.forEach((fn) => fn());
-}
-
 async function fetchOnboardingStatus() {
   if (!supabase) {
-    singleton.isLoading = false;
-    notifyListeners();
-    return;
+    return { isComplete: false, isLoading: false, error: null };
   }
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
-      singleton.isComplete = false;
-      singleton.isLoading = false;
-      notifyListeners();
-      return;
+      return { isComplete: false, isLoading: false, error: null };
     }
 
     try {
@@ -38,10 +21,7 @@ async function fetchOnboardingStatus() {
       if (res.ok) {
         const json = await res.json();
         console.log("[useOnboardingStatus] Total Onboarding Status:", json.is_fully_onboarded ? "COMPLETE ✅" : "INCOMPLETE ❌", json);
-        singleton.isComplete = json.is_fully_onboarded === true;
-        singleton.isLoading = false;
-        notifyListeners();
-        return;
+        return { isComplete: json.is_fully_onboarded === true, isLoading: false, error: null };
       }
     } catch (e) {
       console.warn("[useOnboardingStatus] API fallback to DB:", e.message);
@@ -59,83 +39,38 @@ async function fetchOnboardingStatus() {
     if (data && data.length > 0) {
       const flags = parseOnboardingFlags(data[0]);
       console.log("[useOnboardingStatus] DB Fallback Flags:", flags.allComplete ? "COMPLETE ✅" : "INCOMPLETE ❌", flags);
-      singleton.isComplete = flags.allComplete;
+      return { isComplete: flags.allComplete, isLoading: false, error: null };
     } else {
-      singleton.isComplete = false;
+      return { isComplete: false, isLoading: false, error: null };
     }
   } catch (err) {
     console.error("[useOnboardingStatus] Error:", err);
-    singleton.error = err;
-  } finally {
-    singleton.isLoading = false;
-    notifyListeners();
+    return { isComplete: false, isLoading: false, error: err };
   }
-}
-
-function setupSingletonChannel() {
-  if (!supabase || singleton.channel) return;
-
-  singleton.channel = supabase
-    .channel("onboarding_status_singleton")
-    .on("postgres_changes", {
-      event: "*",
-      schema: "public",
-      table: "user_onboarding",
-    }, () => fetchOnboardingStatus())
-    .subscribe();
-}
-
-function teardownSingletonChannel() {
-  if (!supabase || !singleton.channel) return;
-  supabase.removeChannel(singleton.channel);
-  singleton.channel = null;
 }
 
 export const useOnboardingStatus = ({ enabled = true } = {}) => {
   const [state, setState] = useState({
-    onboardingComplete: singleton.isComplete,
-    loading: enabled ? singleton.isLoading : false,
-    error: singleton.error,
+    onboardingComplete: false,
+    loading: enabled,
+    error: null,
   });
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
-  const checkStatus = useCallback(() => {
+  const checkStatus = useCallback(async () => {
     if (!enabled) return;
-    fetchOnboardingStatus();
+    setState({ onboardingComplete: false, loading: true, error: null });
+    const result = await fetchOnboardingStatus();
+    setState({
+      onboardingComplete: result.isComplete,
+      loading: false,
+      error: result.error,
+    });
   }, [enabled]);
 
   useEffect(() => {
     if (!enabled) return;
-
-    const listener = () => {
-      setState({
-        onboardingComplete: singleton.isComplete,
-        loading: singleton.isLoading,
-        error: singleton.error,
-      });
-    };
-
-    singleton.listeners.add(listener);
-
-    if (singleton.listeners.size === 1) {
-      setupSingletonChannel();
-      if (singleton.isLoading) {
-        fetchOnboardingStatus();
-      }
-    }
-
-    return () => {
-      singleton.listeners.delete(listener);
-      if (singleton.listeners.size === 0) {
-        teardownSingletonChannel();
-        singleton.isLoading = true;
-        singleton.isComplete = false;
-        singleton.error = null;
-      }
-    };
-  }, [enabled]);
+    checkStatus();
+  }, [enabled, checkStatus]);
 
   return {
     onboardingComplete: state.onboardingComplete,

@@ -4726,7 +4726,9 @@ app.post("/api/sessions/record", async (req, res) => {
       return res.status(401).json({ success: false, error: "Invalid token" });
     }
     if (!pgPool) {
-      return res.status(500).json({ success: false, error: "Direct database not available" });
+      // Skip session recording if direct DB not available, but don't fail
+      console.log("[sessions] pgPool not available, skipping session record");
+      return res.json({ success: true, sessionId: null });
     }
     const { userAgent, browser, os, deviceType, sessionFingerprint } = req.body;
     const fingerprint = sessionFingerprint || user.id + "_" + Date.now();
