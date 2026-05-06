@@ -118,7 +118,7 @@ export const getPublicStrategies = async () => {
     const { data: strategies, error } = await supabase
       .from("strategies_c")
       .select(`
-        id, slug, name, short_name, description, risk_level, objective, sector, tags, base_currency, min_investment, provider_name, benchmark_symbol, benchmark_name, fee_type, management_fee_bps, performance_fee_pct, high_water_mark, status, is_public, is_featured, is_kid_strategy, sparkline, icon_url, image_url, holdings, created_at, updated_at,
+        id, slug, name, short_name, description, risk_level, objective, sector, tags, base_currency, min_investment, provider_name, benchmark_symbol, benchmark_name, fee_type, management_fee_bps, performance_fee_pct, high_water_mark, status, is_public, is_featured, is_kid_strategy, icon_url, image_url, holdings, created_at, updated_at,
         strategy_metrics!strategy_metrics_strategy_id_fkey(
           as_of_date,
           r_ytd_pct
