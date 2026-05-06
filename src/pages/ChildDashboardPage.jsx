@@ -4,6 +4,7 @@ import {
   ArrowLeft, ArrowUpRight, ArrowDownLeft, X,
   Wallet, BarChart3, ChevronRight,
   RefreshCw, Search, Star, AlertCircle, Check, ClipboardList,
+  BookOpen, LayoutGrid, ArrowDownToLine, Target,
 } from "lucide-react";
 import SwipeableBalanceCard from "../components/SwipeableBalanceCard";
 import { useProfile } from "../lib/useProfile";
@@ -1193,24 +1194,39 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
           {/* Quick Actions */}
           <motion.div variants={item}>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-4 gap-2 text-[11px] font-medium">
               {[
-                { label: "Transfer", icon: ArrowDownLeft, onClick: openTransferModal, disabled: openingTransfer },
-                { label: "Invest", icon: BarChart3, onClick: () => setShowInvest(true) },
+                { label: "Learn", icon: BookOpen, onClick: null, comingSoon: true },
+                { label: "Invest", icon: LayoutGrid, onClick: () => setShowInvest(true) },
+                { label: "Deposit", icon: ArrowDownToLine, onClick: openTransferModal, disabled: openingTransfer },
+                { label: "Goals", icon: Target, onClick: null, comingSoon: true },
               ].map((btn, i) => {
                 const Icon = btn.icon;
                 return (
                   <button
                     key={i}
-                    disabled={btn.disabled}
+                    disabled={btn.comingSoon || btn.disabled}
                     onClick={btn.onClick}
-                    className="flex flex-col items-center gap-2 rounded-2xl bg-white px-2 py-3.5 text-[11px] font-medium text-slate-700 shadow-md transition-all active:scale-95 active:shadow-sm disabled:opacity-60"
+                    className={`relative flex flex-col items-center gap-2 rounded-2xl px-1 py-3 transition-all ${
+                      btn.comingSoon
+                        ? "bg-slate-100/70 cursor-not-allowed border border-slate-200/60"
+                        : "bg-white shadow-md active:scale-95 active:shadow-sm"
+                    } disabled:opacity-60`}
                     type="button"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-50 text-violet-700">
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                      btn.comingSoon ? "bg-slate-200 text-slate-400" : "bg-violet-50 text-violet-700"
+                    }`}>
                       <Icon className="h-4 w-4" />
                     </span>
-                    <span className="text-center leading-tight">{btn.disabled ? "Loading…" : btn.label}</span>
+                    <span className={`text-center leading-tight font-medium ${
+                      btn.comingSoon ? "text-slate-400" : "text-slate-700"
+                    }`}>
+                      {btn.disabled && !btn.comingSoon ? "Loading…" : btn.label}
+                    </span>
+                    {btn.comingSoon && (
+                      <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 inline-flex items-center px-1.5 py-px rounded-full text-[7px] font-bold uppercase tracking-wider text-white" style={{ background: "linear-gradient(90deg,#7c3aed,#a855f7)" }}>Soon</span>
+                    )}
                   </button>
                 );
               })}
