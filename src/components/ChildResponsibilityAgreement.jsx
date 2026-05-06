@@ -267,7 +267,7 @@ async function buildChildAgreementPdf({ parentProfile, childData, signatureDataU
   y += 4;
 
   if (signatureDataUrl) {
-    doc.addImage(signatureDataUrl, "PNG", MARGIN, y, 50, 20);
+    doc.addImage(signatureDataUrl, "JPEG", MARGIN, y, 50, 20, undefined, "FAST");
   }
 
   y += 24;
@@ -387,7 +387,9 @@ export default function ChildResponsibilityAgreement({
       return;
     }
     setError("");
-    const sigUrl = sigPadRef.current.toDataURL("image/png");
+    // Use JPEG for the signature — avoids jsPDF's PNG re-encode which fails on
+    // memory-constrained mobile WebViews (throws "load error" consistently)
+    const sigUrl = sigPadRef.current.toDataURL("image/jpeg", 0.92);
     const now = new Date().toISOString();
     try {
       const pdfBuffer = await buildChildAgreementPdf({
