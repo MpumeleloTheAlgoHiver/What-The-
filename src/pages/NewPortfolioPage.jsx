@@ -163,7 +163,7 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
   const stockDropdownRef = useRef(null);
   const { profile } = useProfile();
   const { strategies, selectedStrategy: userSelectedStrategy, loading: strategiesLoading, selectStrategy, refetch: refetchStrategies } = useUserStrategies();
-  const { chartData: realChartData, loading: chartLoading } = useStrategyChartData(userSelectedStrategy?.strategyId, timeFilter, userSelectedStrategy?.firstInvestedDate || null);
+  const { chartData: realChartData, loading: chartLoading } = useStrategyChartData(userSelectedStrategy?.strategyId, timeFilter);
   const { returnData: periodReturnData, loading: periodReturnLoading } = useStrategyPeriodReturns(profile?.id, userSelectedStrategy?.strategyId, timeFilter);
 
   const fullName = [profile?.firstName || profile?.first_name, profile?.lastName || profile?.last_name]
@@ -403,9 +403,10 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
     strategies.forEach(s => {
       const sym = s.shortName || s.name || "Strategy";
       if (!holdingsMap.has(sym)) {
-        const holdingsArr = s.holdings || [];
+        // Prefer snapshotHoldings (live per-user data from client_strategy_returns_c)
+        // over static strategy holdings from strategies_c
+        const holdingsArr = s.snapshotHoldings || s.holdings || [];
         const topLogos = holdingsArr
-          .sort((a, b) => (b.weight || 0) - (a.weight || 0))
           .slice(0, 3)
           .map(h => h.logo_url || null)
           .filter(Boolean);
@@ -441,22 +442,10 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
   const holdings = allStrategyHoldings;
 
   const getChartData = () => {
+    // realChartData values are inception_pnl/100 — already PnL in ZAR from
+    // client_strategy_returns_c. No NAV scaling needed.
     if (realChartData && realChartData.length > 0) {
-      const currentValue = currentStrategy.currentValue || 0;
-      const costBasis = currentStrategy.investedAmount || 0;
-      if (currentValue > 0 && realChartData.length > 0) {
-        const latestNav = realChartData[realChartData.length - 1].value;
-        if (!latestNav || latestNav <= 0) return [];
-        const scaleFactor = currentValue / latestNav;
-        const points = [];
-        points.push({ ...realChartData[0], day: null, value: 0 });
-        realChartData.forEach(d => {
-          const marketValueAtDate = d.value * scaleFactor;
-          const pnl = marketValueAtDate - costBasis;
-          points.push({ ...d, value: Number(pnl.toFixed(2)) });
-        });
-        return points;
-      }
+      return realChartData;
     }
     return [];
   };
@@ -829,12 +818,15 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
                             </div>
                           )}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                           {[
                             { id: "D", label: "D" },
                             { id: "5d", label: "5D" },
                             { id: "m", label: "M" },
+                            { id: "6m", label: "6M" },
                             { id: "ytd", label: "YTD" },
+                            { id: "1y", label: "1Y" },
+                            { id: "inception", label: "All" },
                           ].map((filter) => (
                             <button
                               key={filter.id}
