@@ -1101,9 +1101,18 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
       if (strategyIds.length > 0) {
         const { data: strats } = await supabase
           .from("strategies_c")
-          .select("id, name, short_name, description, risk_level, min_investment, is_kid_strategy, is_featured")
+          .select("id, name, short_name, description, risk_level, min_investment, is_kid_strategy, is_featured, holdings, strategy_metrics(*)")
           .in("id", strategyIds);
-        (strats || []).forEach(s => { stratMap[s.id] = s; });
+        (strats || []).forEach(s => {
+          const metrics = Array.isArray(s.strategy_metrics)
+            ? [...s.strategy_metrics].sort((a, b) => (b.as_of_date || "").localeCompare(a.as_of_date || ""))[0]
+            : s.strategy_metrics;
+          const r_ytd = metrics?.r_ytd ?? metrics?.r_ytd_pct ?? metrics?.r_1y ?? null;
+          const ytd_as_of_date = metrics?.as_of_date ?? null;
+          const holdingsList = (Array.isArray(s.holdings) ? s.holdings : [])
+            .sort((a, b) => (b.weight || 0) - (a.weight || 0));
+          stratMap[s.id] = { ...s, r_ytd, ytd_as_of_date, holdingsList };
+        });
       }
       const rows = baseRows.map(h => {
         const sec = secMap[h.security_id] || {};
@@ -1205,7 +1214,20 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
     const totalCostCents = hs.reduce((s, h) => s + Number(h.avg_fill || 0) * Number(h.quantity || 0), 0);
     const pnlCents = totalValueCents - totalCostCents;
     const pnlP = totalCostCents > 0 ? (pnlCents / totalCostCents) * 100 : 0;
-    return { id: sid, name: strat.name || "Strategy", short_name: strat.short_name, risk_level: strat.risk_level, is_featured: strat.is_featured, totalValue: totalValueCents, pnl: pnlCents, pnlPct: pnlP, holdings: hs };
+    return {
+      id: sid,
+      name: strat.name || "Strategy",
+      short_name: strat.short_name,
+      risk_level: strat.risk_level,
+      is_featured: strat.is_featured,
+      totalValue: totalValueCents,
+      pnl: pnlCents,
+      pnlPct: pnlP,
+      holdings: hs,
+      r_ytd: strat.r_ytd ?? null,
+      ytd_as_of_date: strat.ytd_as_of_date ?? null,
+      holdingsList: strat.holdingsList || [],
+    };
   });
 
   // Best performing individual assets (top 5 by unrealized_pnl %)
@@ -1393,57 +1415,87 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             {strategyCards.length > 0 ? (
               <div className="space-y-3">
                 {strategyCards.map((sc) => {
-                  const isUp = sc.pnl >= 0;
+                  const ytdPct = sc.r_ytd != null ? sc.r_ytd * 100 : null;
+                  const isUp = (ytdPct ?? sc.pnlPct) >= 0;
+                  const displayList = sc.holdingsList.length > 0 ? sc.holdingsList : sc.holdings;
                   return (
                     <div key={sc.id} className="rounded-2xl border border-slate-200 bg-white shadow-md p-4">
-                      {/* Header */}
+                      {/* Header: name + sparkline */}
                       <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                            style={{ background: "linear-gradient(135deg,#ede9fe,#ddd6fe)" }}>
-                            <BarChart3 className="h-5 w-5 text-purple-600" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">{sc.short_name || sc.name}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {sc.risk_level && (
-                                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-600 border border-violet-100">{sc.risk_level}</span>
-                              )}
-                              {sc.is_featured && (
-                                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-violet-100 text-violet-700">Featured</span>
-                              )}
-                            </div>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 truncate">{sc.short_name || sc.name}</p>
+                          <p className="text-[11px] text-slate-400 truncate">{sc.name}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{fmt(sc.totalValue)}</p>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-sm font-bold text-slate-900 tabular-nums">{fmt(sc.totalValue)}</p>
-                          <p className={`text-xs font-semibold tabular-nums ${isUp ? "text-emerald-600" : "text-red-500"}`}>
-                            {isUp ? "+" : ""}{fmt(sc.pnl)} ({isUp ? "+" : ""}{sc.pnlPct.toFixed(2)}%)
-                          </p>
+                        <div className="flex-shrink-0 rounded-xl bg-slate-50 px-2 py-1.5">
+                          <svg width="64" height="32" viewBox="0 0 64 32">
+                            <defs>
+                              <linearGradient id={`sg-child-${sc.id}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={isUp ? "#7c3aed" : "#e11d48"} stopOpacity="0.15" />
+                                <stop offset="100%" stopColor={isUp ? "#7c3aed" : "#e11d48"} stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            <polyline
+                              points="0,28 10,22 20,24 30,14 40,10 50,16 64,6"
+                              fill="none"
+                              stroke={isUp ? "#7c3aed" : "#e11d48"}
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle cx="64" cy="6" r="2.5" fill={isUp ? "#7c3aed" : "#e11d48"} />
+                          </svg>
                         </div>
                       </div>
-                      {/* Holdings avatar row */}
-                      {sc.holdings.length > 0 && (
-                        <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                      {/* Badges */}
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {sc.risk_level && (
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">{sc.risk_level}</span>
+                        )}
+                        {sc.is_featured && (
+                          <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-600">Featured</span>
+                        )}
+                      </div>
+                      {/* YTD return */}
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 mb-3">
+                        <span className="text-xs font-semibold text-slate-600">YTD return</span>
+                        <div className="flex items-center gap-2">
+                          {ytdPct != null ? (
+                            <span className={`text-xs font-semibold ${ytdPct >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                              {ytdPct >= 0 ? "+" : ""}{ytdPct.toFixed(2)}%
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                          {sc.ytd_as_of_date && (
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(sc.ytd_as_of_date).toLocaleDateString("en-ZA", { month: "short", day: "numeric" })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Holdings snapshot */}
+                      {displayList.length > 0 && (
+                        <div className="flex items-center gap-2">
                           <div className="flex -space-x-2">
-                            {sc.holdings.slice(0, 4).map(h => (
-                              <div key={h.id} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
+                            {displayList.slice(0, 3).map((h, i) => (
+                              <div key={h.symbol || h.id || i} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
                                 {h.logo_url ? (
                                   <img src={h.logo_url} alt={h.symbol} className="h-full w-full object-cover" />
                                 ) : (
                                   <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[8px] font-bold text-slate-600">
-                                    {h.symbol?.substring(0, 2)}
+                                    {(h.symbol || "").substring(0, 2)}
                                   </div>
                                 )}
                               </div>
                             ))}
-                            {sc.holdings.length > 4 && (
+                            {displayList.length > 3 && (
                               <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[10px] font-semibold text-slate-500">
-                                +{sc.holdings.length - 4}
+                                +{displayList.length - 3}
                               </div>
                             )}
                           </div>
-                          <span className="text-[11px] text-slate-400">{sc.holdings.length} holding{sc.holdings.length !== 1 ? "s" : ""}</span>
+                          <span className="text-xs font-semibold text-slate-500">Holdings snapshot</span>
                         </div>
                       )}
                     </div>
