@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
-import { getStrategyPriceHistory } from "./strategyData";
 
 export const useUserStrategies = () => {
   const [data, setData] = useState({
@@ -28,7 +27,7 @@ export const useUserStrategies = () => {
       // MINT Frontend Playbook: source from client_strategy_returns_c (single source of truth)
       const { data: returnsData, error: returnsError } = await supabase
         .from("client_strategy_returns_c")
-        .select("strategy_id, basket_value, inception_pnl, inception_pct, as_of_date")
+        .select("strategy_id, basket_value, inception_pnl, inception_pct, as_of_date, holdings_snapshot")
         .eq("user_id", userId)
         .order("as_of_date", { ascending: false });
 
@@ -95,7 +94,7 @@ export const useUserStrategies = () => {
         return;
       }
 
-      // Build latest returns map per strategy_id
+      // Build latest returns map per strategy_id (first row per strategy = most recent)
       const returnsMap = {};
       for (const row of (returnsData || [])) {
         if (!returnsMap[row.strategy_id]) {
@@ -104,11 +103,12 @@ export const useUserStrategies = () => {
             inceptionPnlCents: row.inception_pnl == null ? null : Number(row.inception_pnl),
             inceptionPct: row.inception_pct == null ? null : Number(row.inception_pct),
             asOfDate: row.as_of_date,
+            holdingsSnapshot: Array.isArray(row.holdings_snapshot) ? row.holdings_snapshot : [],
           };
         }
       }
 
-      // Get active strategies for metadata
+      // Get active strategies for metadata (name, logos, static weights)
       const { data: allStrategies, error: stratErr } = await supabase
         .from("strategies_c")
         .select("id, name, short_name, description, risk_level, sector, icon_url, image_url, holdings, status")
@@ -132,6 +132,34 @@ export const useUserStrategies = () => {
             ? basketValueRands - inceptionPnlRands
             : basketValueRands;
 
+          // Build a lookup from static holdings for logo/name enrichment
+          const staticBySymbol = Object.fromEntries(
+            (strategy.holdings || []).map(h => [h.symbol, { logo_url: h.logo_url, name: h.name }])
+          );
+
+          // Convert holdings_snapshot (cents) to display-ready shape with weights
+          const snapshot = returns.holdingsSnapshot;
+          const totalMarketValueCents = snapshot.reduce(
+            (sum, h) => sum + Number(h.current_price || 0) * Number(h.qty || 0), 0
+          );
+          const snapshotHoldings = snapshot.map(h => {
+            const marketValueCents = Number(h.current_price || 0) * Number(h.qty || 0);
+            const weight = totalMarketValueCents > 0 ? (marketValueCents / totalMarketValueCents) * 100 : 0;
+            const info = staticBySymbol[h.symbol] || {};
+            return {
+              symbol: h.symbol,
+              name: info.name || h.symbol,
+              logo_url: info.logo_url || null,
+              weight,
+              qty: Number(h.qty || 0),
+              avg_fill: Number(h.avg_fill || 0),       // cents — divide by 100 to display
+              current_price: Number(h.current_price || 0), // cents — divide by 100 to display
+              avg_exit: h.avg_exit ?? null,
+              is_fill_day: h.is_fill_day || false,
+              is_exit_day: h.is_exit_day || false,
+            };
+          }).sort((a, b) => b.weight - a.weight);
+
           return {
             id: strategy.id,
             strategyId: strategy.id,
@@ -142,6 +170,9 @@ export const useUserStrategies = () => {
             sector: strategy.sector || "",
             iconUrl: strategy.icon_url,
             imageUrl: strategy.image_url,
+            // snapshotHoldings: live per-user holdings from client_strategy_returns_c
+            // holdings: static strategy definition from strategies_c (fallback)
+            snapshotHoldings: snapshotHoldings.length > 0 ? snapshotHoldings : (strategy.holdings || []),
             holdings: strategy.holdings || [],
             investedAmount: investedAmount,
             currentValue: basketValueRands,
@@ -179,7 +210,7 @@ export const useUserStrategies = () => {
   return { ...data, selectStrategy, refetch: fetchUserStrategies };
 };
 
-export const useStrategyChartData = (strategyId, timeFilter = "W", purchaseDate = null) => {
+export const useStrategyChartData = (strategyId, timeFilter = "m") => {
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -191,51 +222,56 @@ export const useStrategyChartData = (strategyId, timeFilter = "W", purchaseDate 
       }
 
       setLoading(true);
-
-      const timeframeMap = {
-        "D": "1D",
-        "W": "1W",
-        "M": "1M",
-        "ALL": "1Y",
-        "5d": "1W",
-        "m": "1M",
-        "ytd": "1Y",
-        "all": "1Y",
-      };
-
-      const timeframe = timeframeMap[timeFilter] || timeframeMap["D"] || "1D";
-
       try {
-        const priceHistory = await getStrategyPriceHistory(strategyId, timeframe);
-
-        if (!priceHistory || priceHistory.length === 0) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
           setChartData([]);
           setLoading(false);
           return;
         }
 
-        let filteredHistory = priceHistory;
-        if (purchaseDate) {
-          const purchaseDateStr = purchaseDate.slice(0, 10);
-          const afterPurchase = priceHistory.filter(p => p.ts.split("T")[0] >= purchaseDateStr);
-          if (afterPurchase.length >= 1) {
-            filteredHistory = afterPurchase;
-          } else {
-            const beforePurchase = priceHistory.filter(p => p.ts.split("T")[0] < purchaseDateStr);
-            if (beforePurchase.length > 0) {
-              const lastKnown = beforePurchase[beforePurchase.length - 1];
-              filteredHistory = [lastKnown, { ...lastKnown, ts: purchaseDateStr + "T00:00:00Z" }];
-            } else {
-              filteredHistory = priceHistory.slice(-1);
-            }
-          }
+        const now = new Date();
+        const startDateMap = {
+          "D":         new Date(now.getTime() - 7 * 86400000),
+          "5d":        new Date(now.getTime() - 10 * 86400000),
+          "m":         new Date(now.getTime() - 45 * 86400000),
+          "ytd":       new Date(now.getFullYear(), 0, 1),
+          "6m":        new Date(now.getTime() - 200 * 86400000),
+          "1y":        new Date(now.getTime() - 400 * 86400000),
+          "inception": null,
+        };
+        const startDate = Object.prototype.hasOwnProperty.call(startDateMap, timeFilter)
+          ? startDateMap[timeFilter]
+          : startDateMap["m"];
+
+        let query = supabase
+          .from("client_strategy_returns_c")
+          .select("as_of_date, basket_value, inception_pnl")
+          .eq("user_id", session.user.id)
+          .eq("strategy_id", strategyId)
+          .order("as_of_date", { ascending: true });
+
+        if (startDate) {
+          query = query.gte("as_of_date", startDate.toISOString().split("T")[0]);
         }
 
-        const formattedData = formatChartData(filteredHistory, timeFilter);
-        setChartData(formattedData);
+        const { data, error } = await query;
+        if (error || !data?.length) {
+          setChartData([]);
+          setLoading(false);
+          return;
+        }
 
+        // Use inception_pnl (cents → ZAR) as the Y-axis so the chart shows
+        // cumulative PnL in rands — matches the existing PnL axis format.
+        const priceHistory = data.map(row => ({
+          ts: row.as_of_date + "T00:00:00Z",
+          nav: (Number(row.inception_pnl) || 0) / 100,
+        }));
+
+        setChartData(formatChartData(priceHistory, timeFilter));
       } catch (err) {
-        console.error("Error fetching chart data:", err);
+        console.error("[useStrategyChartData] Error:", err);
         setChartData([]);
       } finally {
         setLoading(false);
@@ -243,7 +279,7 @@ export const useStrategyChartData = (strategyId, timeFilter = "W", purchaseDate 
     };
 
     fetchChartData();
-  }, [strategyId, timeFilter, purchaseDate]);
+  }, [strategyId, timeFilter]);
 
   return { chartData, loading };
 };
@@ -259,7 +295,7 @@ export const useStrategyPeriodReturns = (userId, strategyId, activeTab = "m") =>
 
   useEffect(() => {
     const fetchPeriodReturns = async () => {
-      if (!userId || !strategyId || !["D", "5d", "m", "ytd"].includes(activeTab)) {
+      if (!userId || !strategyId) {
         setLoading(false);
         return;
       }
@@ -267,13 +303,21 @@ export const useStrategyPeriodReturns = (userId, strategyId, activeTab = "m") =>
       setLoading(true);
       try {
         const columnMap = {
-          "D": { pnl: "1d_pnl", pct: "1d_pct" },
-          "5d": { pnl: "5d_pnl", pct: "5d_pct" },
-          "m": { pnl: "1m_pnl", pct: "1m_pct" },
-          "ytd": { pnl: "ytd_pnl", pct: "ytd_pct" }
+          "D":         { pnl: "1d_pnl",        pct: "1d_pct" },
+          "5d":        { pnl: "5d_pnl",        pct: "5d_pct" },
+          "m":         { pnl: "1m_pnl",        pct: "1m_pct" },
+          "ytd":       { pnl: "ytd_pnl",       pct: "ytd_pct" },
+          "6m":        { pnl: "6m_pnl",        pct: "6m_pct" },
+          "1y":        { pnl: "1y_pnl",        pct: "1y_pct" },
+          "inception": { pnl: "inception_pnl", pct: "inception_pct" },
         };
 
         const columns = columnMap[activeTab];
+        if (!columns) {
+          setReturnData({ pnl: null, pct: null, basketValue: 0 });
+          setLoading(false);
+          return;
+        }
 
         const { data, error } = await supabase
           .from("client_strategy_returns_c")
@@ -349,7 +393,10 @@ function formatChartData(priceHistory, timeFilter) {
     }
     case "ALL":
     case "ytd":
-    case "all": {
+    case "all":
+    case "6m":
+    case "1y":
+    case "inception": {
       const monthKeys = new Set();
       priceHistory.forEach((p) => {
         const { year, month } = parseDateParts(p.ts);
