@@ -23,71 +23,148 @@ export const useUserStrategies = () => {
         return;
       }
 
-      const token = session.access_token;
-      const res = await fetch("/api/user/strategies", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const userId = session.user.id;
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        console.error("[useUserStrategies] API error:", res.status, errJson);
-        setData((prev) => ({ ...prev, loading: false, error: errJson.error || "Failed to fetch strategies" }));
+      // MINT Frontend Playbook: source from client_strategy_returns_c (single source of truth)
+      const { data: returnsData, error: returnsError } = await supabase
+        .from("client_strategy_returns_c")
+        .select("strategy_id, basket_value, inception_pnl, inception_pct, as_of_date")
+        .eq("user_id", userId)
+        .order("as_of_date", { ascending: false });
+
+      if (returnsError) {
+        console.error("[useUserStrategies] Error fetching client_strategy_returns_c:", returnsError);
+        // Fallback to API if playbook table unavailable
+        const token = session.access_token;
+        const res = await fetch("/api/user/strategies", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          console.error("[useUserStrategies] API error:", res.status, errJson);
+          setData((prev) => ({ ...prev, loading: false, error: errJson.error || "Failed to fetch strategies" }));
+          return;
+        }
+
+        const json = await res.json();
+        const serverStrategies = json.strategies || [];
+
+        if (serverStrategies.length === 0) {
+          console.log("[useUserStrategies] No strategies found from API");
+          setData({ strategies: [], selectedStrategy: null, loading: false, error: null });
+          return;
+        }
+
+        const formattedStrategies = serverStrategies.map((strategy) => {
+          const latestMetric = strategy.metrics;
+          const invested = strategy.investedAmount || 0;
+          const currentVal = strategy.currentMarketValue != null
+            ? Number(strategy.currentMarketValue.toFixed(2))
+            : invested;
+          const changePct = invested > 0 ? ((currentVal - invested) / invested) * 100 : 0;
+
+          return {
+            id: strategy.id,
+            strategyId: strategy.id,
+            name: strategy.name || "Unknown Strategy",
+            shortName: strategy.shortName || strategy.name || "Strategy",
+            description: strategy.description || "",
+            riskLevel: strategy.riskLevel || "Moderate",
+            sector: strategy.sector || "",
+            iconUrl: strategy.iconUrl,
+            imageUrl: strategy.imageUrl,
+            holdings: strategy.holdings || [],
+            investedAmount: invested,
+            currentValue: currentVal,
+            unitsHeld: 0,
+            entryDate: null,
+            lastUpdated: latestMetric?.as_of_date,
+            previousMonthChange: parseFloat(changePct.toFixed(1)),
+            metrics: latestMetric,
+            firstInvestedDate: strategy.firstInvestedDate || null,
+          };
+        });
+
+        setData({
+          strategies: formattedStrategies,
+          selectedStrategy: formattedStrategies[0] || null,
+          loading: false,
+          error: null,
+        });
         return;
       }
 
-      const json = await res.json();
-      const serverStrategies = json.strategies || [];
+      // Build latest returns map per strategy_id
+      const returnsMap = {};
+      for (const row of (returnsData || [])) {
+        if (!returnsMap[row.strategy_id]) {
+          returnsMap[row.strategy_id] = {
+            basketValueCents: Number(row.basket_value || 0),
+            inceptionPnlCents: row.inception_pnl == null ? null : Number(row.inception_pnl),
+            inceptionPct: row.inception_pct == null ? null : Number(row.inception_pct),
+            asOfDate: row.as_of_date,
+          };
+        }
+      }
 
-      if (serverStrategies.length === 0) {
-        console.log("[useUserStrategies] No strategies found from API");
-        setData({ strategies: [], selectedStrategy: null, loading: false, error: null });
+      // Get active strategies for metadata
+      const { data: allStrategies, error: stratErr } = await supabase
+        .from("strategies_c")
+        .select("id, name, short_name, description, risk_level, sector, icon_url, image_url, holdings, status")
+        .eq("status", "active");
+
+      if (stratErr) {
+        console.error("[useUserStrategies] Error fetching strategies:", stratErr);
+        setData((prev) => ({ ...prev, loading: false, error: stratErr.message }));
         return;
       }
 
-      const formattedStrategies = serverStrategies.map((strategy) => {
-        const latestMetric = strategy.metrics;
-        const invested = strategy.investedAmount || 0;
-        const currentVal = strategy.currentMarketValue != null
-          ? Number(strategy.currentMarketValue.toFixed(2))
-          : invested;
-        const changePct = invested > 0 ? ((currentVal - invested) / invested) * 100 : 0;
+      // Filter to strategies that have returns data
+      const matchedStrategies = (allStrategies || [])
+        .filter(s => returnsMap[s.id])
+        .map(strategy => {
+          const returns = returnsMap[strategy.id];
+          const basketValueRands = returns.basketValueCents / 100;
+          const inceptionPnlRands = returns.inceptionPnlCents != null ? returns.inceptionPnlCents / 100 : null;
+          // Derive invested amount from basket_value - inception_pnl
+          const investedAmount = inceptionPnlRands != null
+            ? basketValueRands - inceptionPnlRands
+            : basketValueRands;
 
-        return {
-          id: strategy.id,
-          strategyId: strategy.id,
-          name: strategy.name || "Unknown Strategy",
-          shortName: strategy.shortName || strategy.name || "Strategy",
-          description: strategy.description || "",
-          riskLevel: strategy.riskLevel || "Moderate",
-          sector: strategy.sector || "",
-          iconUrl: strategy.iconUrl,
-          imageUrl: strategy.imageUrl,
-          holdings: strategy.holdings || [],
-          investedAmount: invested,
-          currentValue: currentVal,
-          unitsHeld: 0,
-          entryDate: null,
-          lastUpdated: latestMetric?.as_of_date,
-          previousMonthChange: parseFloat(changePct.toFixed(1)),
-          metrics: latestMetric,
-          firstInvestedDate: strategy.firstInvestedDate || null,
-        };
-      });
+          return {
+            id: strategy.id,
+            strategyId: strategy.id,
+            name: strategy.name || "Unknown Strategy",
+            shortName: strategy.short_name || strategy.name || "Strategy",
+            description: strategy.description || "",
+            riskLevel: strategy.risk_level || "Moderate",
+            sector: strategy.sector || "",
+            iconUrl: strategy.icon_url,
+            imageUrl: strategy.image_url,
+            holdings: strategy.holdings || [],
+            investedAmount: investedAmount,
+            currentValue: basketValueRands,
+            unitsHeld: 0,
+            entryDate: null,
+            lastUpdated: returns.asOfDate,
+            previousMonthChange: returns.inceptionPct != null ? parseFloat(returns.inceptionPct.toFixed(1)) : 0,
+            metrics: { as_of_date: returns.asOfDate },
+            firstInvestedDate: null,
+          };
+        });
+
+      console.log("[useUserStrategies] Strategies from client_strategy_returns_c:", matchedStrategies.length);
 
       setData({
-        strategies: formattedStrategies,
-        selectedStrategy: formattedStrategies[0] || null,
+        strategies: matchedStrategies,
+        selectedStrategy: matchedStrategies[0] || null,
         loading: false,
         error: null,
       });
-
     } catch (err) {
-      console.error("Error fetching strategies:", err);
-      setData((prev) => ({
-        ...prev,
-        loading: false,
-        error: err.message,
-      }));
+      console.error("[useUserStrategies] Unexpected error:", err);
+      setData((prev) => ({ ...prev, loading: false, error: err.message }));
     }
   }, []);
 
