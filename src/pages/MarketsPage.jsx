@@ -255,13 +255,14 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
     (async () => {
       setKidStrategiesLoading(true);
       try {
-        const { data } = await supabase
+        const { data, error: ksErr } = await supabase
           .from("strategies_c")
           .select("id, name, short_name, risk_level, sector, objective, tags, min_investment, is_featured, sparkline, ytd_as_of_date, holdings, strategy_metrics(as_of_date, r_ytd_pct)")
           .eq("status", "active")
           .eq("is_kid_strategy", true)
           .order("is_featured", { ascending: false })
           .order("name");
+        console.log("[markets] kid strategies DB →", { rows: (data||[]).length, error: ksErr });
         const rows = data || [];
         const allSymbols = [...new Set(
           rows.flatMap(s => (Array.isArray(s.holdings) ? s.holdings : []).map(h => h.symbol || h.ticker).filter(Boolean))
@@ -282,8 +283,9 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
           const sparkline = s.sparkline || [20, 22, 21, 24, 26, 25, 28, 30, 29, 32];
           return { ...s, r_ytd, holdingsList, sparkline };
         });
+        console.log("[markets] kid strategies enriched count →", enriched.length);
         setKidStrategies(enriched);
-      } catch (e) { console.error("[markets] kid strategies", e); }
+      } catch (e) { console.error("[markets] kid strategies ERROR", e); }
       finally { setKidStrategiesLoading(false); }
     })();
 
@@ -292,7 +294,9 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
       try {
         const authUser = (await supabase.auth.getUser())?.data?.user;
         const uid = authUser?.id || profile?.id;
+        console.log("[markets] child detection → uid:", uid, "profile.id:", profile?.id, "authUser.id:", authUser?.id);
         if (!uid) {
+          console.warn("[markets] child detection → no uid, giving up");
           setChildAccounts([]);
           return;
         }
@@ -303,11 +307,12 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
           .select("id, first_name, last_name, date_of_birth, available_balance, kyc_status, relationship, parent_id, primary_user_id")
           .or(`parent_id.eq.${uid},primary_user_id.eq.${uid}`);
 
-        if (error) throw error;
+        console.log("[markets] family_members DB →", { rows: (data||[]).length, error, rawData: data });
 
         const dbChildren = (data || []).filter(
           (m) => String(m.relationship || "").toLowerCase() === "child",
         );
+        console.log("[markets] DB children found:", dbChildren.length, dbChildren);
 
         if (dbChildren.length > 0) {
           setChildAccounts(dbChildren);
@@ -315,14 +320,17 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
         }
 
         // Fallback endpoint used across family flows; handles policies/server-side access.
+        console.log("[markets] DB returned no children, trying API fallback /api/family-members?user_id=", uid);
         const res = await fetch(`/api/family-members?user_id=${uid}`);
         const json = await res.json().catch(() => ({}));
+        console.log("[markets] API fallback response →", json);
         const members = Array.isArray(json?.members) ? json.members : [];
         const apiChildren = members.filter(
           (m) => String(m.relationship || "").toLowerCase() === "child",
         );
+        console.log("[markets] API children found:", apiChildren.length, apiChildren);
         setChildAccounts(apiChildren);
-      } catch (e) { console.error("[markets] child accounts", e); }
+      } catch (e) { console.error("[markets] child accounts ERROR", e); }
     })();
   }, [profile?.id]);
 
@@ -1801,7 +1809,7 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
             ) : (
               <>
                 {/* ── For Kids section ── */}
-                {childAccounts.length > 0 && kidStrategies.length > 0 && (
+                {childAccounts.length > 0 && (
                   <section className="mb-6">
                     <div className="mb-3 flex items-center gap-2">
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-100">
@@ -1810,7 +1818,16 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
                       <h2 className="text-base font-bold text-slate-900">For Kids</h2>
                       <span className="rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-[10px] font-bold text-violet-600 uppercase tracking-wide">Kid-Safe</span>
                     </div>
-                    <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-hide">
+                    {kidStrategiesLoading ? (
+                      <div className="flex gap-3 pb-2">
+                        {[1,2].map(i => <div key={i} className="flex-shrink-0 w-72 h-36 rounded-2xl bg-slate-100 animate-pulse" />)}
+                      </div>
+                    ) : kidStrategies.length === 0 ? (
+                      <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-5 text-sm text-violet-700">
+                        Kid-safe strategies coming soon — check back shortly.
+                      </div>
+                    ) : (
+                  <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-hide">
                       {kidStrategies.map((strategy) => {
                         const ytdPct = strategy.r_ytd != null ? strategy.r_ytd * 100 : null;
                         const isUp = (ytdPct ?? 0) >= 0;
@@ -1886,6 +1903,7 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
                         );
                       })}
                     </div>
+                    )}
                   </section>
                 )}
 
