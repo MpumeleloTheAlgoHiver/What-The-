@@ -114,7 +114,7 @@ const FactsheetPage = ({ onBack, strategy, onOpenInvest, onNavigateToOnboarding 
         if (!resolvedId && strategySlug) {
           const { data, error } = await supabase
             .from("strategies_c")
-            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, created_at")
+            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, is_kid_strategy, created_at")
             .eq("slug", strategySlug)
             .maybeSingle();
 
@@ -131,7 +131,7 @@ const FactsheetPage = ({ onBack, strategy, onOpenInvest, onNavigateToOnboarding 
         if (resolvedId) {
           const { data, error } = await supabase
             .from("strategies_c")
-            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, created_at")
+            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, is_kid_strategy, created_at")
             .eq("id", resolvedId)
             .maybeSingle();
 
