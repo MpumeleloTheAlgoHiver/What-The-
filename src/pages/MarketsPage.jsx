@@ -250,8 +250,6 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
   // Fetch kid strategies and child accounts when profile is ready
   useEffect(() => {
     if (!supabase) return;
-    const uid = profile?.id;
-    if (!uid) return;
 
     // Fetch kid strategies
     (async () => {
@@ -289,15 +287,40 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
       finally { setKidStrategiesLoading(false); }
     })();
 
-    // Fetch child accounts for this parent
+    // Fetch child accounts for this parent (DB first, API fallback)
     (async () => {
       try {
-        const { data } = await supabase
+        const authUser = (await supabase.auth.getUser())?.data?.user;
+        const uid = authUser?.id || profile?.id;
+        if (!uid) {
+          setChildAccounts([]);
+          return;
+        }
+
+        const { data, error } = await supabase
           .from("family_members")
-          .select("id, first_name, last_name, date_of_birth, available_balance, kyc_status")
-          .eq("primary_user_id", uid)
-          .eq("relationship", "child");
-        setChildAccounts(data || []);
+          .select("id, first_name, last_name, date_of_birth, available_balance, kyc_status, relationship")
+          .eq("primary_user_id", uid);
+
+        if (error) throw error;
+
+        const dbChildren = (data || []).filter(
+          (m) => String(m.relationship || "").toLowerCase() === "child",
+        );
+
+        if (dbChildren.length > 0) {
+          setChildAccounts(dbChildren);
+          return;
+        }
+
+        // Fallback endpoint used across family flows; handles policies/server-side access.
+        const res = await fetch(`/api/family-members?user_id=${uid}`);
+        const json = await res.json().catch(() => ({}));
+        const members = Array.isArray(json?.members) ? json.members : [];
+        const apiChildren = members.filter(
+          (m) => String(m.relationship || "").toLowerCase() === "child",
+        );
+        setChildAccounts(apiChildren);
       } catch (e) { console.error("[markets] child accounts", e); }
     })();
   }, [profile?.id]);
