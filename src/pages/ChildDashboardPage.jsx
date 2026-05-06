@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ArrowUpRight, ArrowDownLeft, X,
@@ -921,38 +921,6 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
 // â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-// â”€â”€â”€ StrategyMiniChart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-function StrategyMiniChart({ values = [] }) {
-  const data = values.map((v, i) => ({ i, v }));
-  const color = "#5b21b6";
-  const id = "smc-" + Math.random().toString(36).slice(2);
-  return (
-    <div className="h-12 w-24">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-          <defs>
-            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.18} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <Area type="monotone" dataKey="v" stroke="none" fill={`url(#${id})`} isAnimationActive={false} />
-          <Line
-            type="monotone" dataKey="v" stroke={color} strokeWidth={1.8}
-            dot={(props) => {
-              const { cx, cy, index } = props;
-              if (index !== data.length - 1) return null;
-              return <circle key="dot" cx={cx} cy={cy} r={2.5} fill={color} stroke="white" strokeWidth={1} />;
-            }}
-            isAnimationActive={false}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const { profile } = useProfile();
   const isMounted = useRef(true);
@@ -1262,122 +1230,6 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
               })}
             </div>
           </motion.div>
-
-          {/* â”€â”€ Browse Kid Strategies â”€â”€ */}
-          {(kidStrategiesLoading || kidStrategies.length > 0) && (
-            <motion.div variants={item}>
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <div className="h-2 w-2 rounded-full bg-violet-400" />
-                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Explore Strategies</p>
-              </div>
-
-              {kidStrategiesLoading ? (
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4">
-                  {[0, 1].map(i => (
-                    <div key={i} className="w-72 flex-shrink-0 rounded-2xl border border-slate-100 bg-white p-4 space-y-3 animate-pulse">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-2 flex-1">
-                          <div className="h-4 w-32 bg-slate-100 rounded" />
-                          <div className="h-3 w-48 bg-slate-100 rounded" />
-                          <div className="h-3 w-24 bg-slate-100 rounded" />
-                        </div>
-                        <div className="h-12 w-24 bg-slate-100 rounded-xl" />
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="h-6 w-16 bg-slate-100 rounded-full" />
-                        <div className="h-6 w-20 bg-slate-100 rounded-full" />
-                      </div>
-                      <div className="h-9 bg-slate-50 rounded-xl" />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                [...new Set(kidStrategies.map(s => s.sector || "General"))].map(sector => (
-                  <div key={sector} className="mb-4">
-                    <div className="flex items-center gap-1.5 mb-2 px-1">
-                      <h2 className="text-xs font-bold text-slate-700">{sector}</h2>
-                      <ChevronRight className="h-3 w-3 text-slate-400" />
-                    </div>
-                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {kidStrategies.filter(s => (s.sector || "General") === sector).map(strategy => {
-                        const ytd = strategy.r_ytd;
-                        const ytdPct = ytd != null ? ytd * 100 : null;
-                        const isUp = (ytdPct ?? 0) >= 0;
-                        return (
-                          <button
-                            key={strategy.id}
-                            onClick={() => setShowInvest(true)}
-                            className="w-72 flex-shrink-0 snap-start rounded-2xl border border-slate-100 bg-white shadow-sm p-4 text-left hover:shadow-md hover:border-violet-200 transition active:scale-[0.98]"
-                          >
-                            <div className="flex items-start gap-3 mb-3">
-                              <div className="flex-1 min-w-0 space-y-0.5">
-                                <p className="text-sm font-semibold text-slate-900 truncate">{strategy.short_name || strategy.name}</p>
-                                <p className="text-xs text-slate-500">
-                                  {strategy.risk_level || "Balanced"}{strategy.objective ? ` Â· ${strategy.objective}` : ""}
-                                </p>
-                                {strategy.min_investment > 0 && (
-                                  <p className="text-[11px] text-slate-400">Min. {fmt(strategy.min_investment)}</p>
-                                )}
-                              </div>
-                              <StrategyMiniChart values={strategy.sparkline} />
-                            </div>
-                            <div className="flex flex-wrap gap-1.5 mb-3">
-                              {(strategy.tags || []).slice(0, 2).map(tag => (
-                                <span key={tag} className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">{tag}</span>
-                              ))}
-                              {strategy.is_featured && (
-                                <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-600">Featured</span>
-                              )}
-                            </div>
-                            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 mb-3">
-                              <span className="text-xs font-semibold text-slate-600">YTD return</span>
-                              <div className="flex items-center gap-2">
-                                {ytdPct != null ? (
-                                  <span className={`text-xs font-semibold ${isUp ? "text-emerald-600" : "text-red-500"}`}>
-                                    {isUp ? "+" : ""}{ytdPct.toFixed(2)}%
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-slate-400">&mdash;</span>
-                                )}
-                                {strategy.ytd_as_of_date && (
-                                  <span className="text-[10px] text-slate-400">
-                                    {new Date(strategy.ytd_as_of_date).toLocaleDateString("en-ZA", { month: "short", day: "numeric" })}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {strategy.holdingsList?.length > 0 && (
-                              <div className="flex items-center gap-2">
-                                <div className="flex -space-x-2">
-                                  {strategy.holdingsList.slice(0, 3).map(h => (
-                                    <div key={h.symbol} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
-                                      {h.logo_url ? (
-                                        <img src={h.logo_url} alt={h.symbol} className="h-full w-full object-cover" />
-                                      ) : (
-                                        <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[8px] font-bold text-slate-600">
-                                          {h.symbol?.substring(0, 2)}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                  {strategy.holdingsList.length > 3 && (
-                                    <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[10px] font-semibold text-slate-500">
-                                      +{strategy.holdingsList.length - 3}
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="text-xs font-semibold text-slate-500">Holdings snapshot</span>
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))
-              )}
-            </motion.div>
-          )}
 
           {/* â”€â”€ Strategy Holdings â”€â”€ */}
           <motion.div variants={item}>
