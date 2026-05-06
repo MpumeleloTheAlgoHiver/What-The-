@@ -297,10 +297,11 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
           return;
         }
 
+        // Check both parent_id (primary FK) and primary_user_id (legacy) columns
         const { data, error } = await supabase
           .from("family_members")
-          .select("id, first_name, last_name, date_of_birth, available_balance, kyc_status, relationship")
-          .eq("primary_user_id", uid);
+          .select("id, first_name, last_name, date_of_birth, available_balance, kyc_status, relationship, parent_id, primary_user_id")
+          .or(`parent_id.eq.${uid},primary_user_id.eq.${uid}`);
 
         if (error) throw error;
 
