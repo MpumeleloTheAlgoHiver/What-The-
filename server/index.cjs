@@ -3915,7 +3915,32 @@ app.get("/api/user/strategies", async (req, res) => {
       stratHoldingsByStratId[h.strategy_id].push(h);
     }
 
-    // Fetch live prices for those securities
+    // MINT Frontend Playbook compliance: source strategy values from client_strategy_returns_c.
+    const strategyIds = holdingStrategyIds;
+    const strategyReturnsMap = {};
+    if (strategyIds.length > 0) {
+      const { data: returnsData, error: returnsError } = await db
+        .from("client_strategy_returns_c")
+        .select("strategy_id, basket_value, inception_pnl, inception_pct, as_of_date")
+        .eq("user_id", userId)
+        .in("strategy_id", strategyIds)
+        .order("as_of_date", { ascending: false });
+      if (!returnsError && returnsData) {
+        for (const row of returnsData) {
+          // Keep only the latest row per strategy_id
+          if (!strategyReturnsMap[row.strategy_id]) {
+            strategyReturnsMap[row.strategy_id] = {
+              basketValueCents: Number(row.basket_value || 0),
+              inceptionPnlCents: row.inception_pnl == null ? null : Number(row.inception_pnl),
+              inceptionPct: row.inception_pct == null ? null : Number(row.inception_pct),
+              asOfDate: row.as_of_date,
+            };
+          }
+        }
+      }
+    }
+
+    // Fetch live prices for those securities (fallback only, and for holdings_snapshot enrichment)
     const stratSecIds = (userStratHoldings || []).map(h => h.security_id).filter(Boolean);
     let stratLivePriceMap = {};
     const symbolPnlMap = {};
@@ -3927,6 +3952,7 @@ app.get("/api/user/strategies", async (req, res) => {
       (stratSecs || []).forEach(s => { stratLivePriceMap[s.id] = (s.last_price || 0); }); // Keep as Rands as in DB
 
       // Build per-symbol P&L from actual user holdings (skip pending - no avg_fill)
+      // This is for holdings_snapshot enrichment only, NOT for strategy totals.
       for (const h of (userStratHoldings || [])) {
         const sec = (stratSecs || []).find(s => s.id === h.security_id);
         if (!sec) continue;
@@ -4029,8 +4055,20 @@ app.get("/api/user/strategies", async (req, res) => {
         let investedAmount = 0;
         let currentMarketValue = 0;
         const allPending = stratHoldings.length > 0 && stratHoldings.every(h => !h.avg_fill);
-        if (stratHoldings.length === 0) {
-          // No holdings allocated yet — compute invested amount from transactions
+
+        // Per playbook: source from client_strategy_returns_c if available
+        const returnsData = strategyReturnsMap[strategy.id];
+        if (returnsData) {
+          currentMarketValue = returnsData.basketValueCents / 100; // Convert cents to Rands
+          // Derive invested amount from basket_value - inception_pnl. If inception_pnl is null, treat as flat.
+          if (returnsData.inceptionPnlCents != null) {
+            investedAmount = (returnsData.basketValueCents - returnsData.inceptionPnlCents) / 100;
+          } else {
+            investedAmount = currentMarketValue;
+          }
+          console.log(`[user/strategies] Strategy ${strategy.name} from client_strategy_returns_c: basket=R${currentMarketValue}, invested=R${investedAmount}`);
+        } else if (stratHoldings.length === 0) {
+          // No returns data and no holdings — compute invested amount from transactions (fallback)
           for (const tx of (transactions || [])) {
             const txName = (tx.name || "").trim();
             let txStratName = null;
@@ -4044,7 +4082,9 @@ app.get("/api/user/strategies", async (req, res) => {
             }
           }
           currentMarketValue = investedAmount;
+          console.log(`[user/strategies] Strategy ${strategy.name} from transactions (fallback): invested=R${investedAmount}`);
         } else if (!allPending) {
+          // No returns data but holdings exist — compute from holdings (fallback)
           for (const h of stratHoldings) {
             const qty = Number(h.quantity || 0);
             const avgFill = Number(h.avg_fill || 0);
@@ -4055,6 +4095,7 @@ app.get("/api/user/strategies", async (req, res) => {
             investedAmount += (avgFill * qty) / 100;
             currentMarketValue += marketVal;
           }
+          console.log(`[user/strategies] Strategy ${strategy.name} from holdings (fallback): invested=R${investedAmount}, market=R${currentMarketValue}`);
         }
 
         // Calculate dynamic YTD if utility is available

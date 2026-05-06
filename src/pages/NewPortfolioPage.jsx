@@ -858,15 +858,13 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
                           const cv = currentStrategy.currentValue || 0;
                           const ia = currentStrategy.investedAmount || 0;
                           const isStratPending = cv === 0 && ia === 0;
-                          // Use period return data if available, otherwise fall back to current calculation.
-                          // periodReturnData.pnl/pct are null when not invested long enough for the period.
-                          const pnl = (periodReturnData?.pnl != null && periodReturnData.pnl !== 0)
-                            ? periodReturnData.pnl
-                            : (cv - ia);
-                          const pnlPct = (periodReturnData?.pct != null && periodReturnData.pct !== 0)
-                            ? periodReturnData.pct
-                            : (ia > 0 ? (pnl / ia) * 100 : 0);
+                          // Use period return data if available. periodReturnData.pnl/pct are
+                          // null when not invested long enough for the period — per playbook,
+                          // show N/A instead of falling back to all-time %.
+                          const pnl = periodReturnData?.pnl != null ? periodReturnData.pnl : (cv - ia);
+                          const pnlPct = periodReturnData?.pct != null ? periodReturnData.pct : (ia > 0 ? (pnl / ia) * 100 : 0);
                           const isPos = pnl >= 0;
+                          const hasPeriodData = periodReturnData?.pct != null;
                           if (isStratPending) {
                             return (
                               <>
@@ -886,7 +884,9 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
                                   {isPos ? '+' : '-'}R{Math.abs(pnl).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${isPos ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'}`}>
-                                  {isPos ? '+' : ''}{pnlPct.toFixed(1)}%
+                                  {hasPeriodData
+                                    ? `${isPos ? '+' : ''}${pnlPct.toFixed(1)}%`
+                                    : 'N/A'}
                                 </span>
                               </div>
                             </>
