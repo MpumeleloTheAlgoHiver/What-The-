@@ -1179,14 +1179,16 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
     fetchTransactions();
   }
 
-  // market_value and avg_fill are stored in rands; convert to cents for fmt
-  const totalPortfolioCents = holdings.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
+  // stock_holdings_c.market_value and avg_fill are stored in CENTS.
+  // Per MINT Frontend Playbook: divide by 100 only for display.
+  const totalPortfolioCents = holdings.reduce((s, h) => s + Number(h.market_value || 0), 0);
   const totalPnlCents = holdings.reduce((s, h) => {
-    const costRands = Number(h.avg_fill || 0) * Number(h.quantity || 0);
-    const marketRands = Number(h.market_value) || 0;
-    return s + Math.round((marketRands - costRands) * 100);
+    const costCents = Number(h.avg_fill || 0) * Number(h.quantity || 0);
+    const marketCents = Number(h.market_value || 0);
+    return s + (marketCents - costCents);
   }, 0);
-  const pnlPct = totalPortfolioCents > 0 ? ((totalPnlCents / Math.max(totalPortfolioCents - totalPnlCents, 1)) * 100) : 0;
+  const totalCostCentsAll = totalPortfolioCents - totalPnlCents;
+  const pnlPct = totalCostCentsAll > 0 ? (totalPnlCents / totalCostCentsAll) * 100 : 0;
   const isPortUp = totalPnlCents >= 0;
 
   // Group holdings by strategy
@@ -1199,8 +1201,8 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
   const strategyCards = Object.entries(strategyGroups).map(([sid, hs]) => {
     const strat = strategyMap[sid] || {};
-    const totalValueCents = hs.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
-    const totalCostCents = hs.reduce((s, h) => s + Math.round(Number(h.avg_fill || 0) * Number(h.quantity || 0)), 0);
+    const totalValueCents = hs.reduce((s, h) => s + Number(h.market_value || 0), 0);
+    const totalCostCents = hs.reduce((s, h) => s + Number(h.avg_fill || 0) * Number(h.quantity || 0), 0);
     const pnlCents = totalValueCents - totalCostCents;
     const pnlP = totalCostCents > 0 ? (pnlCents / totalCostCents) * 100 : 0;
     return { id: sid, name: strat.name || "Strategy", short_name: strat.short_name, risk_level: strat.risk_level, is_featured: strat.is_featured, totalValue: totalValueCents, pnl: pnlCents, pnlPct: pnlP, holdings: hs };
@@ -1210,10 +1212,10 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const bestAssets = [...holdings]
     .filter(h => h.symbol && h.market_value > 0)
     .map(h => {
-      const costRands = Number(h.avg_fill || 0) * Number(h.quantity || 0);
-      const marketRands = h.market_value || 0;
-      const pnlR = marketRands - costRands;
-      const pnlP = costRands > 0 ? ((marketRands - costRands) / costRands) * 100 : 0;
+      const costCents = Number(h.avg_fill || 0) * Number(h.quantity || 0);
+      const marketCents = Number(h.market_value || 0);
+      const pnlR = (marketCents - costCents) / 100;
+      const pnlP = costCents > 0 ? ((marketCents - costCents) / costCents) * 100 : 0;
       return { ...h, pnlR, pnlP };
     })
     .sort((a, b) => b.pnlP - a.pnlP)

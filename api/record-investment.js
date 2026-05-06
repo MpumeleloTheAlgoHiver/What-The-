@@ -230,13 +230,14 @@ export default async function handler(req, res) {
       (securitiesData || []).forEach(s => { secBySymbol[s.symbol] = s; });
 
       // Compute total basket cost at current prices so we can scale by investAmount
+      // NOTE: securities_c.last_price is stored in RANDS (not cents)
       let totalBasketCostRands = 0;
       for (const holding of strategyHoldings) {
         const sec = secBySymbol[holding.symbol];
         if (!sec) continue;
         const qty = Number(holding.quantity || holding.shares || 0);
-        const priceCents = Number(sec.last_price || 0);
-        if (qty > 0 && priceCents > 0) totalBasketCostRands += (qty * priceCents) / 100;
+        const priceRands = Number(sec.last_price || 0);
+        if (qty > 0 && priceRands > 0) totalBasketCostRands += qty * priceRands;
       }
       // investAmount is how much the user actually put in (before fees)
       const scalingRatio = totalBasketCostRands > 0 ? investAmount / totalBasketCostRands : 1;
@@ -264,7 +265,9 @@ export default async function handler(req, res) {
         // Scale shares proportionally to what the user actually invested (ENFORCE INTEGER)
         const holdingQty = Math.floor(rawHoldingQty * scalingRatio);
 
-        const priceCents = Number(sec.last_price || 0);
+        // last_price is in Rands; avg_fill / market_value are stored in CENTS
+        const priceRands = Number(sec.last_price || 0);
+        const priceCents = Math.round(priceRands * 100);
         if (priceCents <= 0) {
           console.warn("[record-investment] No price found for:", holding.symbol);
           skippedSymbols.push(holding.symbol);
@@ -374,7 +377,8 @@ export default async function handler(req, res) {
         .maybeSingle();
 
       if (!secError && securityData?.last_price) {
-        currentPriceCents = Number(securityData.last_price);
+        // last_price is stored in Rands; convert to cents
+        currentPriceCents = Math.round(Number(securityData.last_price) * 100);
       } else {
         const { data: priceData, error: priceError } = await db
           .from("stock_returns_c")

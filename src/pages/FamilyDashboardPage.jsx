@@ -1063,6 +1063,7 @@ function MemberRow({ gradient, name, role, roleIcon, detail, amount, onClick }) 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function FamilyDashboardPage({ onBack, userId, onOpenChildDashboard, onGetInsured }) {
+  console.log('[family] FamilyDashboardPage mounted, userId:', userId);
   const { profile } = useProfile();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1096,8 +1097,10 @@ export default function FamilyDashboardPage({ onBack, userId, onOpenChildDashboa
   async function fetchMembers() {
     setLoading(true);
     try {
+      console.log('[family] fetchMembers userId:', userId);
       const res = await fetch(`/api/family-members?user_id=${userId}`);
       const json = await res.json();
+      console.log('[family] fetchMembers response:', json);
       setMembers(json.members || []);
     } catch (e) { console.error("[family]", e); }
     finally { setLoading(false); }

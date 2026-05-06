@@ -28,7 +28,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function checkYieldBasket() {
   console.log("Checking strategy: Yield Basket");
   const { data: strategies, error: stratErr } = await supabase
-    .from('strategies')
+    .from('strategies_c')
     .select('id, name, holdings, slug')
     .ilike('name', '%Yield Basket%');
 

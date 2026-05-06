@@ -2867,13 +2867,14 @@ app.post("/api/record-investment", async (req, res) => {
       (securitiesData || []).forEach(s => { secBySymbol[s.symbol] = s; });
 
       // Compute total basket cost at current prices so we can scale by investAmount
+      // NOTE: securities_c.last_price is stored in RANDS (not cents)
       let totalBasketCostRands = 0;
       for (const holding of strategyHoldings) {
         const sec = secBySymbol[holding.symbol];
         if (!sec) continue;
         const qty = Number(holding.quantity || holding.shares || 0);
-        const priceCents = Number(sec.last_price || 0);
-        if (qty > 0 && priceCents > 0) totalBasketCostRands += (qty * priceCents) / 100;
+        const priceRands = Number(sec.last_price || 0);
+        if (qty > 0 && priceRands > 0) totalBasketCostRands += qty * priceRands;
       }
       // investAmount is how much the user actually put in (before fees)
       const scalingRatio = totalBasketCostRands > 0 ? investAmount / totalBasketCostRands : 1;
@@ -2901,7 +2902,9 @@ app.post("/api/record-investment", async (req, res) => {
         // Scale shares proportionally to what the user actually invested — always whole shares
         const holdingQty = Math.max(1, Math.round(rawHoldingQty * scalingRatio));
 
-        const priceCents = Number(sec.last_price || 0);
+        // last_price is in Rands; avg_fill / market_value are stored in CENTS
+        const priceRands = Number(sec.last_price || 0);
+        const priceCents = Math.round(priceRands * 100);
         if (priceCents <= 0) {
           console.warn("[record-investment] No price found for:", holding.symbol);
           skippedSymbols.push(holding.symbol);
@@ -2992,7 +2995,8 @@ app.post("/api/record-investment", async (req, res) => {
         .maybeSingle();
 
       if (!secError && securityData?.last_price) {
-        currentPriceCents = Number(securityData.last_price);
+        // last_price is stored in Rands; convert to cents
+        currentPriceCents = Math.round(Number(securityData.last_price) * 100);
         console.log("[record-investment] Got last_price from securities:", currentPriceCents, "cents");
       } else {
         console.log("[record-investment] No last_price in securities, checking security_prices table");
@@ -6664,15 +6668,13 @@ app.get('/api/family-members', async (req, res) => {
   const userId = req.query.user_id;
   if (!userId) return res.status(400).json({ error: 'user_id required' });
   try {
-    if (pgPool) {
-      const rows = await fmQuery(
-        'SELECT * FROM family_members WHERE primary_user_id = $1 ORDER BY created_at ASC',
-        [userId]
-      );
-      return res.json({ members: rows });
-    }
+    console.log('[family] GET userId:', userId, 'pgPool available:', !!pgPool);
+    // Force Supabase fallback for now to debug
     const db = supabaseAdmin || supabase;
-    const { data, error } = await db.from('family_members').select('*').eq('primary_user_id', userId).order('created_at', { ascending: true });
+    console.log('[family] using supabase admin:', !!supabaseAdmin);
+    const { data, error } = await db.from('family_members').select('*').or(`primary_user_id.eq.${userId},parent_id.eq.${userId}`).order('created_at', { ascending: true });
+    console.log('[family] query error:', error);
+    console.log('[family] query data length:', data?.length);
     if (error) throw error;
     return res.json({ members: data || [] });
   } catch (e) {

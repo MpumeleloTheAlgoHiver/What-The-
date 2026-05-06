@@ -548,8 +548,18 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500 mb-1">Period Return</p>
-                  <p className={`text-2xl font-bold ${periodReturnLoading ? 'text-slate-400' : (periodReturnData.pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {periodReturnLoading ? '...' : `${(periodReturnData.pct || 0) >= 0 ? '+' : ''}${(periodReturnData.pct || 0).toFixed(2)}%`}
+                  <p className={`text-2xl font-bold ${
+                    periodReturnLoading
+                      ? 'text-slate-400'
+                      : periodReturnData.pct == null
+                        ? 'text-slate-400'
+                        : periodReturnData.pct >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}>
+                    {periodReturnLoading
+                      ? '...'
+                      : periodReturnData.pct == null
+                        ? 'N/A'
+                        : `${periodReturnData.pct >= 0 ? '+' : ''}${periodReturnData.pct.toFixed(2)}%`}
                   </p>
                 </div>
               </div>
@@ -848,11 +858,12 @@ const NewPortfolioPage = ({ onOpenNotifications, onOpenInvest, onOpenStrategies,
                           const cv = currentStrategy.currentValue || 0;
                           const ia = currentStrategy.investedAmount || 0;
                           const isStratPending = cv === 0 && ia === 0;
-                          // Use period return data if available, otherwise fall back to current calculation
-                          const pnl = (periodReturnData?.pnl !== undefined && periodReturnData.pnl !== 0)
+                          // Use period return data if available, otherwise fall back to current calculation.
+                          // periodReturnData.pnl/pct are null when not invested long enough for the period.
+                          const pnl = (periodReturnData?.pnl != null && periodReturnData.pnl !== 0)
                             ? periodReturnData.pnl
                             : (cv - ia);
-                          const pnlPct = (periodReturnData?.pct !== undefined && periodReturnData.pct !== 0)
+                          const pnlPct = (periodReturnData?.pct != null && periodReturnData.pct !== 0)
                             ? periodReturnData.pct
                             : (ia > 0 ? (pnl / ia) * 100 : 0);
                           const isPos = pnl >= 0;

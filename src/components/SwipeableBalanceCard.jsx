@@ -173,7 +173,8 @@ const SwipeableBalanceCard = ({
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
-  const [returnData5d, setReturnData5d] = useState({ pnl: 0, pct: 0 });
+  // pnl/pct may be null when not invested long enough for the selected period.
+  const [returnData5d, setReturnData5d] = useState({ pnl: null, pct: null });
   const [latestBasketValue, setLatestBasketValue] = useState(0);
   const holdingsScrollRef = useRef(null);
 
@@ -561,17 +562,17 @@ const SwipeableBalanceCard = ({
               .maybeSingle();
 
             if (!error && data) {
-              const pnlValue = data[columns.pnl] || 0;
-              const pctValue = data[columns.pct] || 0;
+              const rawPnl = data[columns.pnl];
+              const rawPct = data[columns.pct];
               const basketValue = (Number(data.basket_value || 0)) / 100;
               setReturnData5d({
-                pnl: (Number(pnlValue)) / 100,
-                pct: Number(pctValue)
+                pnl: rawPnl == null ? null : Number(rawPnl) / 100,
+                pct: rawPct == null ? null : Number(rawPct)
               });
               setLatestBasketValue(basketValue);
             } else {
               setLatestBasketValue(0);
-              setReturnData5d({ pnl: 0, pct: 0 });
+              setReturnData5d({ pnl: null, pct: null });
             }
           } else if (asset.security_id) {
             const { data, error } = await supabase
@@ -583,25 +584,33 @@ const SwipeableBalanceCard = ({
               .single();
 
             if (!error && data) {
-              const pnlValue = data[columns.pnl] || 0;
-              const pctValue = data[columns.pct] || 0;
+              const rawPnl = data[columns.pnl];
+              const rawPct = data[columns.pct];
               const basketValue = (Number(data.basket_value || 0)) / 100;
               setReturnData5d({
-                pnl: (Number(pnlValue)) / 100,
-                pct: Number(pctValue)
+                pnl: rawPnl == null ? null : Number(rawPnl) / 100,
+                pct: rawPct == null ? null : Number(rawPct)
               });
               setLatestBasketValue(basketValue);
             } else {
               setLatestBasketValue(0);
-              setReturnData5d({ pnl: 0, pct: 0 });
+              setReturnData5d({ pnl: null, pct: null });
             }
           }
         } else if (dbData.holdings.length > 0) {
-          // For portfolio-wide returns, sum returns from all holdings
+          // For portfolio-wide returns, aggregate across holdings.
+          // We track contributors separately so a holding with NULL period values
+          // (e.g. not invested long enough for that period — like Yield Basket on a
+          // 1Y view) does NOT dilute the portfolio % toward zero. Both numerator
+          // (totalPnl) and denominator (contributingInvested / contributingBasket)
+          // exclude null-contribution holdings.
           let totalPnl = 0;
           let weightedPct = 0;
+          let weightSum = 0;
+          let contributingInvested = 0;
           let totalValue = dbData.totalMarketValue;
           let totalInvested = dbData.totalInvestedAmount;
+          let totalBasketValue = 0;
 
           const strategyIds = dbData.holdings
             .filter(h => h.isStrategy && h.strategyId)
@@ -610,6 +619,54 @@ const SwipeableBalanceCard = ({
           const securityIds = dbData.holdings
             .filter(h => h.security_id && !h.isStrategy)
             .map(h => h.security_id);
+
+          // First, fetch all basket values to calculate total basket value
+          const strategyBasketValues = {};
+          if (strategyIds.length > 0) {
+            for (const strategyId of strategyIds) {
+              const { data: row, error: err } = await supabase
+                .from("client_strategy_returns_c")
+                .select("basket_value")
+                .eq("user_id", userId)
+                .eq("strategy_id", strategyId)
+                .order("as_of_date", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!err && row) {
+                const basketValue = (Number(row.basket_value || 0)) / 100;
+                strategyBasketValues[strategyId] = basketValue;
+                totalBasketValue += basketValue;
+              }
+            }
+          }
+
+          const stockBasketValues = {};
+          if (securityIds.length > 0) {
+            for (const securityId of securityIds) {
+              const { data: row, error: err } = await supabase
+                .from("stock_returns_c")
+                .select("basket_value")
+                .eq("security_id", securityId)
+                .order("as_of_date", { ascending: false })
+                .limit(1)
+                .single();
+
+              if (!err && row) {
+                const basketValue = (Number(row.basket_value || 0)) / 100;
+                stockBasketValues[securityId] = basketValue;
+                totalBasketValue += basketValue;
+              }
+            }
+          }
+
+          // Helper to compute a holding's invested amount in rands.
+          const investedRandsForHolding = (h) => {
+            if (h?.invested_amount !== undefined && h?.invested_amount !== null) {
+              return Number(h.invested_amount) / 100;
+            }
+            return (Number(h?.avg_fill || 0) * Number(h?.quantity || 0)) / 100;
+          };
 
           // Fetch latest return data for each strategy
           if (strategyIds.length > 0) {
@@ -624,12 +681,24 @@ const SwipeableBalanceCard = ({
                 .maybeSingle();
 
               if (!err && row) {
-                const pnlValue = row[columns.pnl] || 0;
-                const pctValue = row[columns.pct] || 0;
-                const basketValue = (Number(row.basket_value || 0)) / 100;
-                const weight = dbData.totalMarketValue > 0 ? basketValue / dbData.totalMarketValue : 0;
-                totalPnl += (Number(pnlValue)) / 100;
-                weightedPct += Number(pctValue) * weight;
+                const rawPnl = row[columns.pnl];
+                const rawPct = row[columns.pct];
+                // Skip holdings that don't have data for this period — they
+                // shouldn't dilute either the PnL sum or the % denominator.
+                if (rawPnl == null && rawPct == null) continue;
+
+                const basketValue = strategyBasketValues[strategyId] || 0;
+                const weight = totalBasketValue > 0 ? basketValue / totalBasketValue : 0;
+
+                if (rawPnl != null) {
+                  const holding = dbData.holdings.find(h => h.isStrategy && h.strategyId === strategyId);
+                  totalPnl += Number(rawPnl) / 100;
+                  contributingInvested += investedRandsForHolding(holding);
+                }
+                if (rawPct != null && weight > 0) {
+                  weightedPct += Number(rawPct) * weight;
+                  weightSum += weight;
+                }
               }
             }
           }
@@ -646,21 +715,42 @@ const SwipeableBalanceCard = ({
                 .single();
 
               if (!err && row) {
-                const pnlValue = row[columns.pnl] || 0;
-                const pctValue = row[columns.pct] || 0;
-                const basketValue = (Number(row.basket_value || 0)) / 100;
-                const weight = dbData.totalMarketValue > 0 ? basketValue / dbData.totalMarketValue : 0;
-                totalPnl += (Number(pnlValue)) / 100;
-                weightedPct += Number(pctValue) * weight;
+                const rawPnl = row[columns.pnl];
+                const rawPct = row[columns.pct];
+                if (rawPnl == null && rawPct == null) continue;
+
+                const basketValue = stockBasketValues[securityId] || 0;
+                const weight = totalBasketValue > 0 ? basketValue / totalBasketValue : 0;
+
+                if (rawPnl != null) {
+                  const holding = dbData.holdings.find(h => h.security_id === securityId && !h.isStrategy);
+                  totalPnl += Number(rawPnl) / 100;
+                  contributingInvested += investedRandsForHolding(holding);
+                }
+                if (rawPct != null && weight > 0) {
+                  weightedPct += Number(rawPct) * weight;
+                  weightSum += weight;
+                }
               }
             }
           }
 
-          // Calculate portfolio return percentage
-          const portfolioPct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+          // Portfolio % derived from contributors only. Prefer basket-weighted
+          // percentage (handles cases where invested capital is unknown), and
+          // fall back to PnL/invested when basket weights are unavailable.
+          let portfolioPct;
+          if (weightSum > 0) {
+            portfolioPct = weightedPct / weightSum;
+          } else if (contributingInvested > 0) {
+            portfolioPct = (totalPnl / contributingInvested) * 100;
+          } else {
+            portfolioPct = null;
+          }
 
+          // If nothing contributed, surface null so the UI can render "N/A".
+          const hasAnyContribution = contributingInvested > 0 || weightSum > 0;
           setReturnData5d({
-            pnl: totalPnl,
+            pnl: hasAnyContribution ? totalPnl : null,
             pct: portfolioPct
           });
         }
@@ -685,17 +775,21 @@ const SwipeableBalanceCard = ({
         ? Number(selectedAsset.invested_amount) / 100
         : (Number(selectedAsset.avg_fill || 0) * Number(selectedAsset.quantity || 0)) / 100)
     : dbData.totalInvestedAmount;
-  const displayReturn = ["5d", "m", "ytd", "all"].includes(activeTab)
+  const isPeriodTab = ["5d", "m", "ytd", "all"].includes(activeTab);
+  // displayReturn / returnPct can be null in period tabs when the user hasn't
+  // been invested long enough for that period — surface that to the JSX so we
+  // render "N/A" instead of a misleading R0.00 / 0.00%.
+  const displayReturn = isPeriodTab
     ? returnData5d.pnl
     : (displayMarketValue - displayInvested);
   // Show latest basket_value for period views, otherwise use market value
-  const displayBalance = ["5d", "m", "ytd", "all"].includes(activeTab) && latestBasketValue > 0
+  const displayBalance = isPeriodTab && latestBasketValue > 0
     ? latestBasketValue
     : displayMarketValue;
 
-  const isLoss = displayReturn < 0;
-  const returnPct = ["5d", "m", "ytd", "all"].includes(activeTab)
-    ? truncateDecimal(returnData5d.pct, 2).toFixed(2)
+  const isLoss = displayReturn != null && displayReturn < 0;
+  const returnPct = isPeriodTab
+    ? (returnData5d.pct == null ? null : truncateDecimal(returnData5d.pct, 2).toFixed(2))
     : (displayInvested > 0
       ? truncateDecimal((displayReturn / displayInvested) * 100, 2).toFixed(2)
       : "0.00");
@@ -768,19 +862,21 @@ const SwipeableBalanceCard = ({
               <TrendIcon size={11} strokeWidth={2.5} />
               {isVisible ? (
                 <>
-                  {["5d", "m", "ytd", "all"].includes(activeTab) && (
+                  {isPeriodTab && (
                     <span className="text-[10px] opacity-75">
                       {activeTab === "5d" && "5D:"}{activeTab === "m" && "1M:"}{activeTab === "ytd" && "YTD:"}{activeTab === "all" && "Inc:"}
                     </span>
                   )}
-                  {formatKMB(Math.abs(displayReturn))}
+                  {displayReturn == null ? "N/A" : formatKMB(Math.abs(displayReturn))}
                 </>
               ) : (
                 masked
               )}
             </span>
             <span className={`text-[11px] font-medium ${isLoss ? "text-destructive" : "text-success"}`}>
-              {isVisible ? `${isLoss ? "-" : "+"}${returnPct}%` : masked}
+              {isVisible
+                ? (returnPct == null ? "N/A" : `${isLoss ? "-" : "+"}${returnPct}%`)
+                : masked}
             </span>
           </div>
         </div>

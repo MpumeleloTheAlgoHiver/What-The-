@@ -525,9 +525,10 @@ export const getClientStrategyReturns = async (userId, strategyId, startDate, en
     }
 
     // inception_pct is already in percentage form (1.00 for 1%, not 0.01)
+    // Preserve null so consumers can show "N/A" instead of a misleading 0%.
     const result = data.map((row) => ({
       d: row.as_of_date,
-      v: Number(row.inception_pct || 0)
+      v: row.inception_pct == null ? null : Number(row.inception_pct)
     }));
 
     console.log(`✅ Fetched ${result.length} return points for user ${userId}, strategy ${strategyId}`);

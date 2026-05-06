@@ -172,8 +172,12 @@ export const useStrategyChartData = (strategyId, timeFilter = "W", purchaseDate 
 };
 
 // Fetch period-specific return data from client_strategy_returns_c
+// Per playbook: *_pnl columns are in cents (divide by 100), *_pct columns are
+// already percentages (do NOT divide). NULL period values mean the client
+// hasn't been invested long enough — preserve null so the UI can show "N/A"
+// instead of a misleading 0%.
 export const useStrategyPeriodReturns = (userId, strategyId, activeTab = "m") => {
-  const [returnData, setReturnData] = useState({ pnl: 0, pct: 0, basketValue: 0 });
+  const [returnData, setReturnData] = useState({ pnl: null, pct: null, basketValue: 0 });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -204,20 +208,20 @@ export const useStrategyPeriodReturns = (userId, strategyId, activeTab = "m") =>
           .maybeSingle();
 
         if (!error && data) {
-          const pnlValue = data[columns.pnl] || 0;
-          const pctValue = data[columns.pct] || 0;
+          const rawPnl = data[columns.pnl];
+          const rawPct = data[columns.pct];
           const basketValue = (Number(data.basket_value || 0)) / 100;
           setReturnData({
-            pnl: (Number(pnlValue)) / 100,
-            pct: Number(pctValue),
+            pnl: rawPnl == null ? null : Number(rawPnl) / 100,
+            pct: rawPct == null ? null : Number(rawPct),
             basketValue: basketValue
           });
         } else {
-          setReturnData({ pnl: 0, pct: 0, basketValue: 0 });
+          setReturnData({ pnl: null, pct: null, basketValue: 0 });
         }
       } catch (err) {
         console.warn("[useStrategyPeriodReturns] Error fetching period returns:", err);
-        setReturnData({ pnl: 0, pct: 0, basketValue: 0 });
+        setReturnData({ pnl: null, pct: null, basketValue: 0 });
       } finally {
         setLoading(false);
       }

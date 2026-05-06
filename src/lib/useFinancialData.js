@@ -57,6 +57,67 @@ export const clearFinancialDataCache = () => {
   financialDataCache = null;
 };
 
+// MINT Frontend Playbook compliance: source-of-truth for strategy displays.
+// Returns the latest client_strategy_returns_c row per (user, strategy) with
+// values converted to Rands (basket_value/100, inception_pnl/100). *_pct stays
+// raw. Returns {} on failure so individual-stock logic still works.
+async function fetchStrategyAggregates(userId, strategyIds) {
+  if (!supabase || !userId || !strategyIds || strategyIds.length === 0) return {};
+  const uniqIds = [...new Set(strategyIds.filter(Boolean))];
+  const out = {};
+  await Promise.all(uniqIds.map(async (sid) => {
+    try {
+      const { data, error } = await supabase
+        .from("client_strategy_returns_c")
+        .select("basket_value, inception_pnl, inception_pct, as_of_date")
+        .eq("user_id", userId)
+        .eq("strategy_id", sid)
+        .order("as_of_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!error && data) {
+        out[sid] = {
+          basketValueRands: Number(data.basket_value || 0) / 100,
+          inceptionPnlRands: data.inception_pnl == null ? null : Number(data.inception_pnl) / 100,
+          inceptionPct: data.inception_pct == null ? null : Number(data.inception_pct),
+          asOfDate: data.as_of_date,
+        };
+      }
+    } catch (e) {
+      console.warn("[fetchStrategyAggregates] failed for", sid, e?.message);
+    }
+  }));
+  return out;
+}
+
+// Split holdings into individual stocks (no strategy_id) and the set of unique
+// strategy ids represented. Strategy holdings get a single aggregate per
+// strategy, sourced from client_strategy_returns_c, instead of summing each
+// underlying row's last_price * quantity.
+function splitHoldingsByStrategy(holdings) {
+  const individuals = [];
+  const strategyIds = new Set();
+  for (const h of holdings || []) {
+    if (h?.strategy_id) strategyIds.add(h.strategy_id);
+    else individuals.push(h);
+  }
+  return { individuals, strategyIds: [...strategyIds] };
+}
+
+// Live market value (Rands) for an individual (non-strategy) holding using
+// last_price * quantity, falling back to stored market_value. Per playbook,
+// strategy holdings should NOT pass through here.
+function liveValueIndividual(h) {
+  if (h?.last_price != null && h?.quantity != null) {
+    return (Number(h.last_price) * Number(h.quantity)) / 100;
+  }
+  return Number(h?.market_value || 0) / 100;
+}
+
+function costBasisIndividual(h) {
+  return (Number(h?.avg_fill || 0) * Number(h?.quantity || 0)) / 100;
+}
+
 export const useFinancialData = () => {
   const [data, setData] = useState({
     balance: 0,
@@ -104,16 +165,21 @@ export const useFinancialData = () => {
       const allTransactions = safeTxns;
       const creditInfo = creditResult.data;
 
-      const sortedHoldings = [...safeHoldings].filter(h => !h.strategy_id).sort((a, b) => {
+      // Split into individual stocks vs. strategy holdings. Per MINT Frontend
+      // Playbook, strategy values must come from client_strategy_returns_c.
+      const { individuals, strategyIds } = splitHoldingsByStrategy(safeHoldings);
+      const strategyAggregates = await fetchStrategyAggregates(userId, strategyIds);
+
+      // Best assets ranks individual stocks only (unchanged).
+      const sortedHoldings = [...individuals].sort((a, b) => {
         const aGain = (a.unrealized_pnl || 0) / 100;
         const bGain = (b.unrealized_pnl || 0) / 100;
         return bGain - aGain;
       });
 
-      const liveVal = (h) => h.last_price != null && h.quantity != null ? (h.last_price * h.quantity) / 100 : (h.market_value || 0) / 100;
       const bestAssets = sortedHoldings.slice(0, 5).map((h) => {
-        const currentValue = liveVal(h);
-        const costBasis = ((h.avg_fill || 0) * (h.quantity || 0)) / 100;
+        const currentValue = liveValueIndividual(h);
+        const costBasis = costBasisIndividual(h);
         const changePercent = costBasis > 0 ? ((currentValue - costBasis) / costBasis) * 100 : 0;
         return {
           symbol: h.symbol,
@@ -124,7 +190,11 @@ export const useFinancialData = () => {
         };
       });
 
-      const totalInvestments = safeHoldings.reduce((sum, h) => sum + liveVal(h), 0);
+      // Totals: individual stocks via live price * qty; strategies via basket_value.
+      const individualTotal = individuals.reduce((sum, h) => sum + liveValueIndividual(h), 0);
+      const strategyTotal = Object.values(strategyAggregates)
+        .reduce((sum, a) => sum + (a?.basketValueRands || 0), 0);
+      const totalInvestments = individualTotal + strategyTotal;
       
       const incomeTypes = ["credit"];
       const expenseTypes = ["debit"];
@@ -230,11 +300,24 @@ export const useMintBalance = () => {
         const allServerTransactions = Array.isArray(allServerTransactionsRaw) ? allServerTransactionsRaw : [];
         const recentTransactions = allServerTransactions.slice(0, 10);
         const allTransactions = allServerTransactions;
-        
-        const liveV = (h) => h.last_price != null && h.quantity != null ? (h.last_price * h.quantity) / 100 : (h.market_value || 0) / 100;
-        const totalInvestments = holdings.reduce((sum, h) => sum + liveV(h), 0);
-        const costBasisTotal = holdings.reduce((sum, h) => sum + ((h.avg_fill || 0) * (h.quantity || 0)) / 100, 0);
-        const dailyChange = totalInvestments - costBasisTotal;
+
+        // Per playbook: strategies sourced from client_strategy_returns_c.
+        const { individuals, strategyIds } = splitHoldingsByStrategy(holdings);
+        const strategyAggregates = await fetchStrategyAggregates(userId, strategyIds);
+
+        const individualTotal = individuals.reduce((sum, h) => sum + liveValueIndividual(h), 0);
+        const strategyTotal = Object.values(strategyAggregates)
+          .reduce((sum, a) => sum + (a?.basketValueRands || 0), 0);
+        const totalInvestments = individualTotal + strategyTotal;
+
+        // PnL: individuals via live - cost; strategies via inception_pnl.
+        const individualPnl = individuals.reduce(
+          (sum, h) => sum + (liveValueIndividual(h) - costBasisIndividual(h)),
+          0,
+        );
+        const strategyPnl = Object.values(strategyAggregates)
+          .reduce((sum, a) => sum + (a?.inceptionPnlRands || 0), 0);
+        const dailyChange = individualPnl + strategyPnl;
         
         const incomeTypes = ["credit"];
         const expenseTypes = ["debit"];
@@ -427,17 +510,44 @@ export const useInvestments = () => {
       const closedHoldings = holdingsResult.closedHoldings;
       const goals = goalsResult.data || [];
 
-      const liveHV = (h) => h.last_price != null && h.quantity != null ? (h.last_price * h.quantity) / 100 : (h.market_value || 0) / 100;
-      const totalInvestments = holdings.reduce((sum, h) => sum + liveHV(h), 0);
-      const costBasisAll = holdings.reduce((sum, h) => sum + ((h.avg_fill || 0) * (h.quantity || 0)) / 100, 0);
+      // Per playbook: strategies sourced from client_strategy_returns_c.
+      const { individuals, strategyIds } = splitHoldingsByStrategy(holdings);
+      const strategyAggregates = await fetchStrategyAggregates(userId, strategyIds);
+
+      const individualTotal = individuals.reduce((sum, h) => sum + liveValueIndividual(h), 0);
+      const strategyTotal = Object.values(strategyAggregates)
+        .reduce((sum, a) => sum + (a?.basketValueRands || 0), 0);
+      const totalInvestments = individualTotal + strategyTotal;
+
+      const individualCost = individuals.reduce((sum, h) => sum + costBasisIndividual(h), 0);
+      // For strategies, derive cost from basket_value - inception_pnl. Where
+      // inception_pnl is null we fall back to basket_value (treat as flat).
+      const strategyCost = Object.values(strategyAggregates).reduce((sum, a) => {
+        const v = a?.basketValueRands || 0;
+        const p = a?.inceptionPnlRands || 0;
+        return sum + Math.max(0, v - p);
+      }, 0);
+      const costBasisAll = individualCost + strategyCost;
       const monthlyChange = totalInvestments - costBasisAll;
       const monthlyChangePercent = costBasisAll > 0 ? (monthlyChange / costBasisAll) * 100 : 0;
 
+      // Asset-class mix: sum individuals via live value, strategies via basket_value
+      // attributed to the strategy's asset_class on its first holding row (best
+      // available signal without a separate strategy.asset_class field).
       const assetClasses = {};
-      holdings.forEach((h) => {
+      individuals.forEach((h) => {
         const assetClass = h.asset_class || "Other";
-        const holdingValue = liveHV(h);
-        assetClasses[assetClass] = (assetClasses[assetClass] || 0) + holdingValue;
+        assetClasses[assetClass] = (assetClasses[assetClass] || 0) + liveValueIndividual(h);
+      });
+      // Group strategy holdings by strategy_id and aggregate via basket value.
+      const strategyAssetClass = {};
+      (holdings || []).forEach((h) => {
+        if (!h.strategy_id) return;
+        if (!strategyAssetClass[h.strategy_id]) strategyAssetClass[h.strategy_id] = h.asset_class || "Other";
+      });
+      Object.entries(strategyAggregates).forEach(([sid, agg]) => {
+        const cls = strategyAssetClass[sid] || "Other";
+        assetClasses[cls] = (assetClasses[cls] || 0) + (agg?.basketValueRands || 0);
       });
 
       const portfolioMix = Object.entries(assetClasses).map(([label, value]) => ({
@@ -450,14 +560,20 @@ export const useInvestments = () => {
         let currentValue = invested;
 
         if (g.linked_security_id || g.linked_strategy_id) {
-          const linkedHolding = holdings.find(
-            (h) => h.security_id === g.linked_security_id || h.strategy_id === g.linked_strategy_id
-          );
-          if (linkedHolding) {
-            const marketVal = linkedHolding.last_price != null && linkedHolding.quantity != null ? (linkedHolding.last_price * linkedHolding.quantity) / 100 : (linkedHolding.market_value || 0) / 100;
-            const costBasis = ((linkedHolding.avg_fill || 0) * (linkedHolding.quantity || 0)) / 100;
-            const gainLoss = marketVal - costBasis;
-            currentValue = invested + (costBasis > 0 ? (gainLoss / costBasis) * invested : 0);
+          if (g.linked_strategy_id && strategyAggregates[g.linked_strategy_id]) {
+            // Strategy-linked goals: use basket_value directly per playbook.
+            const agg = strategyAggregates[g.linked_strategy_id];
+            currentValue = agg.basketValueRands || invested;
+          } else {
+            const linkedHolding = (holdings || []).find(
+              (h) => h.security_id === g.linked_security_id && !h.strategy_id,
+            );
+            if (linkedHolding) {
+              const marketVal = liveValueIndividual(linkedHolding);
+              const costBasis = costBasisIndividual(linkedHolding);
+              const gainLoss = marketVal - costBasis;
+              currentValue = invested + (costBasis > 0 ? (gainLoss / costBasis) * invested : 0);
+            }
           }
         }
 

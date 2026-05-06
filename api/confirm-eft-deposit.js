@@ -134,13 +134,14 @@ export default async function handler(req, res) {
         const secBySymbol = {};
         (securitiesData || []).forEach(s => { secBySymbol[s.symbol] = s; });
 
+        // NOTE: securities_c.last_price is stored in RANDS (not cents)
         let totalBasketCostRands = 0;
         for (const holding of strategyHoldings) {
           const sec = secBySymbol[holding.symbol];
           if (!sec) continue;
           const qty = Number(holding.quantity || holding.shares || 0);
-          const priceCents = Number(sec.last_price || 0);
-          if (qty > 0 && priceCents > 0) totalBasketCostRands += (qty * priceCents) / 100;
+          const priceRands = Number(sec.last_price || 0);
+          if (qty > 0 && priceRands > 0) totalBasketCostRands += qty * priceRands;
         }
         const scalingRatio = totalBasketCostRands > 0 ? investAmount / totalBasketCostRands : 1;
 
@@ -150,7 +151,9 @@ export default async function handler(req, res) {
           const rawHoldingQty = Number(holding.quantity || holding.shares || 0);
           if (rawHoldingQty <= 0) continue;
           const holdingQty = rawHoldingQty * scalingRatio;
-          const priceCentsVal = Number(sec.last_price || 0);
+          // last_price is in Rands; avg_fill / market_value are stored in CENTS
+          const priceRandsVal = Number(sec.last_price || 0);
+          const priceCentsVal = Math.round(priceRandsVal * 100);
           if (priceCentsVal <= 0) continue;
 
           const { data: existing } = await db
@@ -197,7 +200,10 @@ export default async function handler(req, res) {
         .eq("id", securityId)
         .maybeSingle();
 
-      currentPriceCents = securityData?.last_price ? Number(securityData.last_price) : null;
+      // last_price is in Rands; convert to cents for storage
+      currentPriceCents = securityData?.last_price
+        ? Math.round(Number(securityData.last_price) * 100)
+        : null;
 
       if (!currentPriceCents) {
         const { data: priceData } = await db
@@ -207,6 +213,7 @@ export default async function handler(req, res) {
           .order("as_of_date", { ascending: false })
           .limit(1)
           .maybeSingle();
+        // stock_returns_c.current_price is already stored in CENTS
         if (priceData?.current_price) currentPriceCents = Number(priceData.current_price);
       }
 
