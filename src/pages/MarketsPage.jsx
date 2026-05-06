@@ -255,19 +255,20 @@ const MarketsPage = ({ onBack, onOpenNotifications, onOpenStockDetail, onOpenNew
     (async () => {
       setKidStrategiesLoading(true);
       try {
-        // Fetch all strategies_c with is_kid_strategy; filter status in JS to handle casing/value variance
+        // Fetch ALL strategies_c (no is_kid_strategy DB filter — column type mismatch causes 0 rows)
+        // We filter in JS instead, handling boolean true / string "TRUE" / "true" / 1
         const { data, error: ksErr } = await supabase
           .from("strategies_c")
           .select("id, name, short_name, risk_level, sector, objective, tags, min_investment, is_featured, sparkline, ytd_as_of_date, holdings, status, is_kid_strategy, strategy_metrics(as_of_date, r_ytd_pct)")
-          .eq("is_kid_strategy", true)
           .order("is_featured", { ascending: false })
           .order("name");
-        console.log("[markets] kid strategies DB (unfiltered by status) →", { rows: (data||[]).length, error: ksErr, rawData: data });
-        // Filter in JS: treat any truthy is_kid_strategy value as valid; include all non-rejected statuses
+        console.log("[markets] ALL strategies_c →", { rows: (data||[]).length, error: ksErr });
+        // Filter in JS: handle boolean true, string "true", "TRUE", or 1
         const rows = (data || []).filter(s => {
-          const kidFlag = s.is_kid_strategy === true || s.is_kid_strategy === "true" || s.is_kid_strategy === 1;
+          const raw = s.is_kid_strategy;
+          const kidFlag = raw === true || raw === 1 || String(raw).toLowerCase() === "true";
           const statusOk = !s.status || !["rejected", "archived", "disabled"].includes(String(s.status).toLowerCase());
-          console.log("[markets] strategy candidate →", s.name, "| is_kid_strategy:", s.is_kid_strategy, "| status:", s.status, "| kidFlag:", kidFlag, "| statusOk:", statusOk);
+          console.log("[markets] strategy →", s.name, "| is_kid_strategy:", raw, "| status:", s.status, "| kidFlag:", kidFlag);
           return kidFlag && statusOk;
         });
         const allSymbols = [...new Set(
