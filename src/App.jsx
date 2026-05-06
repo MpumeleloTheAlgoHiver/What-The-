@@ -1760,7 +1760,7 @@ const App = () => {
           baseAmount={baseInvestmentAmount}
           fees={investmentFees || pendingGoalFlow?.fees}
           initialMethod={pendingPaymentMethod}
-          childId={selectedChildForInvest?.id || null}
+          childId={selectedChildForInvest?.linked_user_id || null}
           onOpenDeposit={() => navigateTo("deposit")}
           onSuccess={async (response) => {
             console.log("Payment successful:", response);

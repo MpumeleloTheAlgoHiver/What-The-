@@ -15,7 +15,7 @@ export default function KidStrategyChildPickerModal({ isOpen, onClose, onSelectC
         if (!session?.user) { setLoading(false); return; }
         const { data } = await supabase
           .from("family_members")
-          .select("id, first_name, last_name, relationship, parent_id, primary_user_id")
+          .select("id, first_name, last_name, available_balance, linked_user_id")
           .eq("primary_user_id", session.user.id)
           .eq("relationship", "child");
         setChildren(data || []);
@@ -103,6 +103,9 @@ export default function KidStrategyChildPickerModal({ isOpen, onClose, onSelectC
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900">
                         {child.first_name} {child.last_name}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Balance: R{Number(child.available_balance || 0).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
