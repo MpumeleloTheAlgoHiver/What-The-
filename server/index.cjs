@@ -4058,6 +4058,7 @@ app.get("/api/user/strategies", async (req, res) => {
 
         // Per playbook: source from client_strategy_returns_c if available
         const returnsData = strategyReturnsMap[strategy.id];
+        console.log(`[user/strategies] Strategy ${strategy.name} (${strategy.id}): returnsData exists? ${!!returnsData}, stratHoldings.length=${stratHoldings.length}`);
         if (returnsData) {
           currentMarketValue = returnsData.basketValueCents / 100; // Convert cents to Rands
           // Derive invested amount from basket_value - inception_pnl. If inception_pnl is null, treat as flat.
@@ -4066,7 +4067,7 @@ app.get("/api/user/strategies", async (req, res) => {
           } else {
             investedAmount = currentMarketValue;
           }
-          console.log(`[user/strategies] Strategy ${strategy.name} from client_strategy_returns_c: basket=R${currentMarketValue}, invested=R${investedAmount}`);
+          console.log(`[user/strategies] Strategy ${strategy.name} from client_strategy_returns_c: basket=R${currentMarketValue}, invested=R${investedAmount}, asOfDate=${returnsData.asOfDate}`);
         } else if (stratHoldings.length === 0) {
           // No returns data and no holdings — compute invested amount from transactions (fallback)
           for (const tx of (transactions || [])) {
