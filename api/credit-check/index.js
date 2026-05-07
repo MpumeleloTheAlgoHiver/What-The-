@@ -6,14 +6,14 @@ import {
   computeCreditScoreContribution,
   computeAdverseListingsContribution,
   computeCreditUtilizationContribution,
-  computeDeviceFingerprintContribution,
   computeDTIContribution,
   computeEmploymentTenureContribution,
   computeContractTypeContribution,
   computeEmploymentCategoryContribution,
   computeIncomeStabilityContribution,
-  computeAlgolendRepaymentContribution,
-  computeAglRetrievalContribution
+  summarizeTruidSummaryData,
+  computeBankStatementCashflowsContribution,
+  computeAlgoHiveBehaviouralContribution
 } from "../../services/loanEngine.js";
 
 function normalizeDobForExperian(dob) {
@@ -110,6 +110,32 @@ export default async function handler(req, res) {
 
   const userId = userData.user.id;
 
+  // ── Retry cooldown: max 1 live Experian run per 30 minutes per user ──
+  {
+    const cooldownMs = 30 * 60 * 1000;
+    const cutoff = new Date(Date.now() - cooldownMs).toISOString();
+    const { data: recentRun } = await supabase
+      .from('loan_engine_score')
+      .select('created_at')
+      .eq('user_id', userId)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentRun?.created_at) {
+      const nextEligibleAt = new Date(new Date(recentRun.created_at).getTime() + cooldownMs);
+      const minsRemaining = Math.max(1, Math.ceil((nextEligibleAt - Date.now()) / 60000));
+      return res.status(200).json({
+        success: false,
+        ok: false,
+        errorCode: 'COOLDOWN_ACTIVE',
+        error: `You already ran an assessment recently. Please wait ${minsRemaining} more minute${minsRemaining !== 1 ? 's' : ''} before trying again.`,
+        nextEligibleAt: nextEligibleAt.toISOString(),
+      });
+    }
+  }
+
   let loanApplicationId = body.loanApplicationId || body.loan_application_id || null;
   const applicationId = body.applicationId || loanApplicationId || `app_${Date.now()}`;
   const overrides = body.userData || body;
@@ -163,7 +189,7 @@ export default async function handler(req, res) {
 
       const { data: snapshotData } = await dbClient
         .from('truid_bank_snapshots')
-        .select('months_captured,main_salary')
+        .select('months_captured,main_salary,avg_monthly_income,avg_monthly_expenses,net_monthly_income,summary_data')
         .eq('user_id', userId)
         .order('captured_at', { ascending: false })
         .limit(1)
@@ -171,12 +197,43 @@ export default async function handler(req, res) {
 
       truidSnapshot = snapshotData || null;
       if (snapshotData) {
+        const truidSummary = summarizeTruidSummaryData(snapshotData.summary_data || []);
         normalizedOverrides.truid_months_captured = snapshotData.months_captured;
         normalizedOverrides.truid_main_salary = snapshotData.main_salary;
+        normalizedOverrides.truid_summary_data = snapshotData.summary_data;
+        normalizedOverrides.truid_avg_monthly_income = truidSummary.monthCount
+          ? truidSummary.averageMonthlyIncome
+          : snapshotData.avg_monthly_income;
+        normalizedOverrides.truid_avg_monthly_expenses = truidSummary.monthCount
+          ? truidSummary.averageMonthlyExpenses
+          : snapshotData.avg_monthly_expenses;
+        normalizedOverrides.truid_net_monthly_income = truidSummary.monthCount
+          ? truidSummary.averageMonthlyNetCashflow
+          : snapshotData.net_monthly_income;
+        normalizedOverrides.truid_average_monthly_debt_repayments = truidSummary.averageMonthlyDebtRepayments;
+
+        if (truidSummary.monthCount) {
+          normalizedOverrides.annual_income = truidSummary.averageMonthlyIncome * 12;
+          normalizedOverrides.annual_expenses = truidSummary.averageMonthlyExpenses * 12;
+          normalizedOverrides.gross_monthly_income = truidSummary.incomeForDti;
+          normalizedOverrides.net_monthly_income = truidSummary.averageMonthlyNetCashflow;
+        }
       }
     } catch (snapshotError) {
       console.warn('TruID snapshot lookup failed:', snapshotError?.message || snapshotError);
     }
+  }
+
+  // ── TruID gate: bank cashflow analysis is mandatory ──
+  // Savings accounts hide real spending — only a transactional/cheque account
+  // gives us the cashflow signals the engine needs.
+  if (!truidSnapshot) {
+    return res.status(200).json({
+      success: false,
+      ok: false,
+      errorCode: 'TRUID_REQUIRED',
+      error: 'Your primary bank account must be linked before we can run your credit assessment. Please connect a cheque or transactional account — savings accounts cannot be used for affordability scoring.',
+    });
   }
 
   // ── PRIMARY ENRICHMENT: Sumsub pack_details (KYC-verified address/identity) ──
@@ -198,6 +255,7 @@ export default async function handler(req, res) {
 
       const pack = packRow?.pack_details || {};
       const info = pack?.info || {};
+      const review = pack?.review || pack?.reviewResult || pack?.inspectionResult || {};
       const addresses = Array.isArray(info?.addresses) ? info.addresses : [];
       const idDocs = Array.isArray(info?.idDocs) ? info.idDocs : [];
 
@@ -214,6 +272,7 @@ export default async function handler(req, res) {
       const packFirstName = info?.firstNameEn || info?.firstName || idCardDoc?.firstNameEn || idCardDoc?.firstName || null;
       const packLastName = info?.lastNameEn || info?.lastName || idCardDoc?.lastNameEn || idCardDoc?.lastName || null;
       const packPhone = pack?.phone || null;
+      const kycResult = review?.reviewAnswer || review?.answer || review?.reviewResult || review?.status || null;
 
       console.log('[credit-check] pack_details extracted:', {
         packPostalCode,
@@ -246,6 +305,10 @@ export default async function handler(req, res) {
       if (!normalizedOverrides.address4 && packTown) normalizedOverrides.address4 = packTown;
       if (!normalizedOverrides.postal_code && packPostalCode) normalizedOverrides.postal_code = String(packPostalCode);
       if (!normalizedOverrides.cell_tel_no && packPhone) normalizedOverrides.cell_tel_no = packPhone;
+      normalizedOverrides.kyc_has_pack_details = Boolean(packRow?.pack_details);
+      normalizedOverrides.kyc_identity_verified = Boolean(packIdentity);
+      normalizedOverrides.kyc_address_verified = Boolean(packPostalCode || packStreet || packFormatted);
+      if (!normalizedOverrides.kyc_result && kycResult) normalizedOverrides.kyc_result = kycResult;
 
       if (!normalizedOverrides.address1 && packFormatted) {
         normalizedOverrides.address1 = packFormatted;
@@ -283,6 +346,42 @@ export default async function handler(req, res) {
       }
     } catch (profileError) {
       console.warn('Profile lookup failed:', profileError?.message || profileError);
+    }
+  }
+
+  // Investment activity — platform engagement signal for AlgoHive behavioural factor
+  if (supabase && userId) {
+    try {
+      const dbClient = accessToken
+        ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            global: { headers: { Authorization: `Bearer ${accessToken}` } }
+          })
+        : supabase;
+
+      const [stockRes, strategyRes] = await Promise.all([
+        dbClient
+          .from('stock_holdings_c')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('Status', 'active')
+          .limit(1)
+          .maybeSingle(),
+        dbClient
+          .from('stock_holdings_c')
+          .select('id')
+          .eq('user_id', userId)
+          .not('strategy_id', 'is', null)
+          .eq('Status', 'active')
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      normalizedOverrides.algohive_has_stock_holdings = Boolean(stockRes.data?.id);
+      normalizedOverrides.algohive_has_strategy_investments = Boolean(strategyRes.data?.id);
+    } catch (investError) {
+      console.warn('Investment activity lookup failed:', investError?.message || investError);
+      normalizedOverrides.algohive_has_stock_holdings = false;
+      normalizedOverrides.algohive_has_strategy_investments = false;
     }
   }
 
@@ -393,31 +492,29 @@ export default async function handler(req, res) {
     const creditScoreBreakdown = computeCreditScoreContribution(creditScoreValue);
     const adverseListingsBreakdown = computeAdverseListingsContribution(creditScoreData);
     const creditUtilizationBreakdown = computeCreditUtilizationContribution(accountMetrics);
-    const deviceFingerprintBreakdown = computeDeviceFingerprintContribution(deviceFingerprint);
 
     const totalMonthlyDebt = accountMetrics.totalMonthlyInstallment || 0;
     const grossMonthlyIncome = Number(userPayload.gross_monthly_income || 0);
-    const dtiBreakdown = computeDTIContribution(totalMonthlyDebt, grossMonthlyIncome);
+    const dtiBreakdown = computeDTIContribution(totalMonthlyDebt, grossMonthlyIncome, userPayload);
 
     const employmentTenureBreakdown = computeEmploymentTenureContribution(userPayload.months_in_current_job);
     const contractTypeBreakdown = computeContractTypeContribution(userPayload.contract_type);
     const employmentCategoryBreakdown = computeEmploymentCategoryContribution(userPayload);
     const incomeStabilityBreakdown = computeIncomeStabilityContribution(userPayload);
-    const algolendRepaymentBreakdown = computeAlgolendRepaymentContribution(userPayload.algolend_is_new_borrower);
-    const aglRetrievalBreakdown = computeAglRetrievalContribution();
+    const bankStatementCashflowsBreakdown = computeBankStatementCashflowsContribution(userPayload);
+    const algoHiveBehaviouralBreakdown = computeAlgoHiveBehaviouralContribution(userPayload, deviceFingerprint);
 
     const breakdown = {
       creditScore: creditScoreBreakdown,
       creditUtilization: creditUtilizationBreakdown,
       adverseListings: adverseListingsBreakdown,
-      deviceFingerprint: deviceFingerprintBreakdown,
-      dti: dtiBreakdown,
-      employmentTenure: employmentTenureBreakdown,
-      contractType: contractTypeBreakdown,
-      employmentCategory: employmentCategoryBreakdown,
       incomeStability: incomeStabilityBreakdown,
-      algolendRepayment: algolendRepaymentBreakdown,
-      aglRetrieval: aglRetrievalBreakdown
+      dti: dtiBreakdown,
+      bankStatementCashflows: bankStatementCashflowsBreakdown,
+      employmentTenure: employmentTenureBreakdown,
+      employmentCategory: employmentCategoryBreakdown,
+      contractType: contractTypeBreakdown,
+      algoHiveBehavioural: algoHiveBehaviouralBreakdown
     };
 
     const experianSnapshot = {
@@ -454,13 +551,38 @@ export default async function handler(req, res) {
     };
 
     const scoreReasons = [];
+
+    // --- Credit bureau ---
     if (creditScoreValue < 580) scoreReasons.push('Low credit score');
     if (creditUtilizationBreakdown.ratioPercent !== null && creditUtilizationBreakdown.ratioPercent > 75) {
       scoreReasons.push('High credit utilization');
     }
     if ((adverseListingsBreakdown.totalAdverse || 0) > 0) scoreReasons.push('Adverse listings present');
     if (dtiBreakdown.dtiPercent !== null && dtiBreakdown.dtiPercent > 50) scoreReasons.push('High debt-to-income ratio');
+
+    // --- Employment ---
     if ((employmentTenureBreakdown.monthsInCurrentJob || 0) < 6) scoreReasons.push('Short employment tenure');
+    const ct = contractTypeBreakdown.contractType;
+    if (ct === 'FIXED_TERM_LT_12') scoreReasons.push('Fixed-term contract under 12 months');
+    else if (ct === 'PART_TIME') scoreReasons.push('Part-time employment');
+    else if (ct === 'UNEMPLOYED_OR_UNKNOWN') scoreReasons.push('Employment status unverified');
+
+    // --- Bank / income stability ---
+    if (incomeStabilityBreakdown.valuePercent === 0) {
+      scoreReasons.push('Bank statement not linked or insufficient income history');
+    } else if (incomeStabilityBreakdown.valuePercent === 50) {
+      scoreReasons.push('Partial bank history — less than 3 months captured');
+    }
+    if (bankStatementCashflowsBreakdown.netCashflowRatio !== null && bankStatementCashflowsBreakdown.netCashflowRatio < 0.05) {
+      scoreReasons.push('Weak monthly cashflow margin');
+    }
+    if (bankStatementCashflowsBreakdown.volatilityRatio !== null && bankStatementCashflowsBreakdown.volatilityRatio > 0.75) {
+      scoreReasons.push('High income volatility');
+    }
+
+    // --- Behavioural ---
+    if (algoHiveBehaviouralBreakdown.isNewBorrower) scoreReasons.push('No prior credit history detected');
+    if (!algoHiveBehaviouralBreakdown.hasAnyInvestment) scoreReasons.push('No investment activity on file');
 
     const success = result?.success === true;
     const ok = success;

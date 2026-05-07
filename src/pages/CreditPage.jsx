@@ -83,8 +83,11 @@ const CreditPage = ({ onOpenNotifications, onOpenCreditApply, initialView = "ove
           <section className="rounded-3xl bg-white/10 p-5 shadow-sm backdrop-blur">
             <p className="text-xs uppercase tracking-[0.2em] text-white/70">Available Credit</p>
             <p className="mt-3 text-3xl font-semibold">
-              R{availableCredit.toLocaleString()}
+              {hasCredit ? `R${availableCredit.toLocaleString()}` : '—'}
             </p>
+            {!hasCredit && (
+              <p className="mt-1.5 text-xs text-white/50">Complete a credit assessment to see your limit</p>
+            )}
             {hasCredit && (
               <div className="mt-4 inline-flex items-center rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-100">
                 Good standing

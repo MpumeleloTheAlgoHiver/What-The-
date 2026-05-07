@@ -1,0 +1,138 @@
+index-BLUt09JQ.js:64 [realtime-prices] Setting up singleton subscription
+index-BLUt09JQ.js:64 [realtime-prices] Subscription status: SUBSCRIBED
+index-BLUt09JQ.js:64 KYC status check: stored="null" current="verified"
+index-BLUt09JQ.js:64 [useOnboardingStatus] Total Onboarding Status: COMPLETE ✅ Object
+index-BLUt09JQ.js:64 Setting up SINGLETON real-time subscription: required-actions-singleton
+index-BLUt09JQ.js:64 Singleton subscription status: SUBSCRIBED
+index-BLUt09JQ.js:294 [Chart] TimeFrame: YTD, Base: 100.31, End: 102.38, Return: 2.06%
+index-BLUt09JQ.js:64 [realtime-prices] Tearing down subscription
+index-BLUt09JQ.js:64 [realtime-prices] Subscription status: CLOSED
+index-BLUt09JQ.js:96 🔍 Fetching latest intraday data from stock_intraday_c...
+index-BLUt09JQ.js:96 🔍 Fetching strategies with metrics from Supabase...
+index-BLUt09JQ.js:99 🔍 Fetching public strategies from Supabase...
+index-BLUt09JQ.js:294 🔍 Fetching news articles from News_articles table...
+index-BLUt09JQ.js:294 ✅ News articles fetched successfully!
+index-BLUt09JQ.js:294 📊 Total count in DB: 3896
+index-BLUt09JQ.js:294 📰 Articles returned: 50
+index-BLUt09JQ.js:294 Sample article: Object
+index-BLUt09JQ.js:99 ✅ Fetched 11 strategies with metrics
+index-BLUt09JQ.js:294 ✅ Fetched strategies: Array(11)
+index-BLUt09JQ.js:105 ✅ Fetched 7 public strategies with dynamic metrics
+index-BLUt09JQ.js:294 ✅ Fetched public strategies: Array(7)
+index-BLUt09JQ.js:96 ✅ Fetched 129 securities with intraday metrics
+index-BLUt09JQ.js:294 📊 Fetched securities: Array(129)
+index-BLUt09JQ.js:294 📊 Securities with prices: 129
+index-BLUt09JQ.js:294 📊 Securities without prices: 0
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:294 Opening strategy: Object
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:294 [Chart] Data appears reversed by value comparison, flipping
+index-BLUt09JQ.js:294 [Chart] TimeFrame: YTD, Base: -2.07, End: -0.34, Return: -83.57%
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(192) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+ Warning: TT: undefined function: 21
+warn @ /assets/pdf.worker.min-qwK7q_zL.mjs:25
+ Warning: TT: undefined function: 21
+warn @ /assets/pdf.worker.min-qwK7q_zL.mjs:25
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(192) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:294 [Chart] TimeFrame: YTD, Base: 100.31, End: 102.38, Return: 2.06%
+index-BLUt09JQ.js:96 📦 Using cached markets data
+index-BLUt09JQ.js:96 📦 Using cached strategies data
+index-BLUt09JQ.js:99 📦 Using cached public strategies data
+index-BLUt09JQ.js:294 🔍 Fetching news articles from News_articles table...
+index-BLUt09JQ.js:294 📊 Fetched securities: Array(129)
+index-BLUt09JQ.js:294 📊 Securities with prices: 129
+index-BLUt09JQ.js:294 📊 Securities without prices: 0
+index-BLUt09JQ.js:294 ✅ Fetched strategies: Array(11)
+index-BLUt09JQ.js:294 ✅ Fetched public strategies: Array(7)
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:64 The width(-1) and height(-1) of chart should be greater than 0,
+       please check the style of container, or the props width(100%) and height(100%),
+       or add a minWidth(0) or minHeight(undefined) or use aspect(undefined) to control the
+       height and width.
+BI @ index-BLUt09JQ.js:64
+index-BLUt09JQ.js:294 ✅ News articles fetched successfully!
+index-BLUt09JQ.js:294 📊 Total count in DB: 3896
+index-BLUt09JQ.js:294 📰 Articles returned: 50
+index-BLUt09JQ.js:294 Sample article: Object
+index-BLUt09JQ.js:254 Native haptics only
+/api/user/strategy-subscriptions:1  Failed to load resource: the server responded with a status of 404 ()

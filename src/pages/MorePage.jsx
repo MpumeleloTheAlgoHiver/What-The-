@@ -130,7 +130,7 @@ const MorePage = ({ onNavigate }) => {
     [
       { id: "help", label: "Help & FAQs", icon: HelpCircle },
       { id: "legal", label: "Legal Documentation", icon: Scale, onClick: () => onNavigate?.("legal") },
-      { id: "subscriptions", label: "Manage Subscriptions", icon: ReceiptText },
+      { id: "subscriptions", label: "Manage Subscriptions", icon: ReceiptText, onClick: () => onNavigate?.("manageSubscriptions") },
       { id: "logout", label: "Log out", icon: LogOut, onClick: handleLogout },
     ],
   ];

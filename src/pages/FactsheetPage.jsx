@@ -114,7 +114,7 @@ const FactsheetPage = ({ onBack, strategy, onOpenInvest, onNavigateToOnboarding 
         if (!resolvedId && strategySlug) {
           const { data, error } = await supabase
             .from("strategies_c")
-            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, created_at")
+            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, is_kid_strategy, created_at")
             .eq("slug", strategySlug)
             .maybeSingle();
 
@@ -131,7 +131,7 @@ const FactsheetPage = ({ onBack, strategy, onOpenInvest, onNavigateToOnboarding 
         if (resolvedId) {
           const { data, error } = await supabase
             .from("strategies_c")
-            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, created_at")
+            .select("id, slug, name, short_name, description, objective, risk_level, sector, tags, base_currency, icon_url, image_url, holdings, management_fee_bps, fee_type, benchmark_name, benchmark_symbol, min_investment, is_kid_strategy, created_at")
             .eq("id", resolvedId)
             .maybeSingle();
 
@@ -1138,36 +1138,49 @@ const FactsheetPage = ({ onBack, strategy, onOpenInvest, onNavigateToOnboarding 
           <div className="mx-4 w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
               <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 opacity-20 animate-pulse" />
-              <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8 text-violet-600 relative z-10">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="currentColor" />
-              </svg>
+              <Info className="h-8 w-8 text-violet-600 relative z-10" />
             </div>
-            <h3 className="text-center text-lg font-bold text-slate-900 mb-1">Upgrade to Premium</h3>
-            <p className="text-center text-xs font-semibold text-violet-600 mb-3">Access More Than 1 Strategy</p>
-            <p className="text-center text-sm text-slate-600 mb-2">
-              Free accounts are limited to 1 active strategy. Upgrade to Premium to unlock unlimited strategies and diversify your portfolio.
+            <h3 className="text-center text-lg font-bold text-slate-900 mb-1">Additional Strategy Fee</h3>
+            <p className="text-center text-xs font-semibold text-violet-600 mb-3">R29/month per strategy</p>
+            <p className="text-center text-sm text-slate-600 mb-4">
+              You already hold an active strategy. Investing in an additional strategy will incur a recurring fee of <span className="font-semibold text-slate-900">R29 per month</span> for this strategy.
             </p>
-            <div className="mb-5 rounded-2xl bg-violet-50 border border-violet-100 p-4">
-              <p className="text-xs font-semibold text-violet-700 mb-2">Premium Benefits</p>
-              <ul className="space-y-1.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2"><span className="text-violet-600">&#10003;</span> Unlimited strategies</li>
-                <li className="flex items-center gap-2"><span className="text-violet-600">&#10003;</span> Advanced analytics</li>
-                <li className="flex items-center gap-2"><span className="text-violet-600">&#10003;</span> Priority support</li>
-              </ul>
+            <div className="mb-5 rounded-2xl bg-violet-50 border border-violet-100 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-600">Monthly strategy fee</p>
+                <p className="text-xs font-semibold text-slate-900">R29.00 / month</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-600">Applies to</p>
+                <p className="text-xs font-semibold text-slate-900">{currentStrategy.name}</p>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-1 border-t border-violet-100">
+                This fee will be reflected in your fee breakdown and charged monthly while you hold this strategy.
+              </p>
             </div>
             <button
               type="button"
-              onClick={() => setShowUpgradeModal(false)}
+              onClick={() => {
+                setShowUpgradeModal(false);
+                const hMap = buildHoldingsBySymbol(holdingsSecurities);
+                const calcMin = calculateMinInvestment(currentStrategy, hMap);
+                const holdingsWithLogos = (currentStrategy.holdings || []).map(h => {
+                  const sym = h.ticker || h.symbol || h;
+                  const sec = holdingsSecurities.find(s => s.symbol === sym);
+                  return { ...h, logo_url: sec?.logo_url || null, shares: getAdjustedShares(h, hMap) };
+                });
+                onOpenInvest?.({ ...currentStrategy, calculatedMinInvestment: calcMin, holdingsWithLogos, isAdditionalStrategy: true });
+              }}
               className="w-full rounded-2xl bg-gradient-to-r from-[#5b21b6] to-[#7c3aed] py-3 text-sm font-semibold text-white shadow-lg shadow-violet-200/60 mb-2"
             >
-              Upgrade Now
+              I Understand, Continue
             </button>
             <button
               type="button"
               onClick={() => setShowUpgradeModal(false)}
               className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-600"
             >
-              Maybe Later
+              Cancel
             </button>
           </div>
         </div>
@@ -1206,25 +1219,9 @@ const FactsheetPage = ({ onBack, strategy, onOpenInvest, onNavigateToOnboarding 
               const alreadyInvested = currentStrategyName && investedStrategies.has(currentStrategyName);
 
               if (!alreadyInvested && investedStrategies.size >= 1) {
-                let isPremium = false;
-                try {
-                  const { data: sub, error: subErr } = await supabase
-                    .from("subscriptions")
-                    .select("plan")
-                    .eq("user_id", session.user.id)
-                    .eq("status", "active")
-                    .maybeSingle();
-
-                  if (!subErr) {
-                    isPremium = sub?.plan === "premium" || sub?.plan === "pro";
-                  }
-                } catch (_) {}
-
-                if (!isPremium) {
-                  setShowUpgradeModal(true);
-                  setInvestChecking(false);
-                  return;
-                }
+                setShowUpgradeModal(true);
+                setInvestChecking(false);
+                return;
               }
 
               const hMap = buildHoldingsBySymbol(holdingsSecurities);

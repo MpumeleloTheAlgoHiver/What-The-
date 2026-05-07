@@ -57,67 +57,6 @@ export const clearFinancialDataCache = () => {
   financialDataCache = null;
 };
 
-// MINT Frontend Playbook compliance: source-of-truth for strategy displays.
-// Returns the latest client_strategy_returns_c row per (user, strategy) with
-// values converted to Rands (basket_value/100, inception_pnl/100). *_pct stays
-// raw. Returns {} on failure so individual-stock logic still works.
-async function fetchStrategyAggregates(userId, strategyIds) {
-  if (!supabase || !userId || !strategyIds || strategyIds.length === 0) return {};
-  const uniqIds = [...new Set(strategyIds.filter(Boolean))];
-  const out = {};
-  await Promise.all(uniqIds.map(async (sid) => {
-    try {
-      const { data, error } = await supabase
-        .from("client_strategy_returns_c")
-        .select("basket_value, inception_pnl, inception_pct, as_of_date")
-        .eq("user_id", userId)
-        .eq("strategy_id", sid)
-        .order("as_of_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!error && data) {
-        out[sid] = {
-          basketValueRands: Number(data.basket_value || 0) / 100,
-          inceptionPnlRands: data.inception_pnl == null ? null : Number(data.inception_pnl) / 100,
-          inceptionPct: data.inception_pct == null ? null : Number(data.inception_pct),
-          asOfDate: data.as_of_date,
-        };
-      }
-    } catch (e) {
-      console.warn("[fetchStrategyAggregates] failed for", sid, e?.message);
-    }
-  }));
-  return out;
-}
-
-// Split holdings into individual stocks (no strategy_id) and the set of unique
-// strategy ids represented. Strategy holdings get a single aggregate per
-// strategy, sourced from client_strategy_returns_c, instead of summing each
-// underlying row's last_price * quantity.
-function splitHoldingsByStrategy(holdings) {
-  const individuals = [];
-  const strategyIds = new Set();
-  for (const h of holdings || []) {
-    if (h?.strategy_id) strategyIds.add(h.strategy_id);
-    else individuals.push(h);
-  }
-  return { individuals, strategyIds: [...strategyIds] };
-}
-
-// Live market value (Rands) for an individual (non-strategy) holding using
-// last_price * quantity, falling back to stored market_value. Per playbook,
-// strategy holdings should NOT pass through here.
-function liveValueIndividual(h) {
-  if (h?.last_price != null && h?.quantity != null) {
-    return (Number(h.last_price) * Number(h.quantity)) / 100;
-  }
-  return Number(h?.market_value || 0) / 100;
-}
-
-function costBasisIndividual(h) {
-  return (Number(h?.avg_fill || 0) * Number(h?.quantity || 0)) / 100;
-}
-
 export const useFinancialData = () => {
   const [data, setData] = useState({
     balance: 0,

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import jsPDF from "jspdf";
 import { Check, Home, Navigation, MapPin, Users, X, AlertCircle, PenTool } from "lucide-react";
-import useSignaturePad from "../lib/useSignaturePad";
+import { downloadPdfBuffer } from "../lib/pdfDownload";
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 const MINT_PURPLE   = [91, 33, 182];       // #5B21B6
@@ -127,15 +127,15 @@ function addPageHeader(doc, pageNum, totalPages) {
   doc.circle(18, 5, 22, "F");
   doc.setGState(doc.GState({ opacity: 1 }));
 
-  // ── Mint wordmark ──
+  // Company name
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(...WHITE);
-  doc.text("MINT", MARGIN, HEADER_H / 2 + 1);
+  doc.text("Mint", MARGIN, HEADER_H / 2 - 1);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...MINT_LIGHT);
-  doc.text("Financial Services (Pty) Ltd  ·  FSP No. 55118", MARGIN, HEADER_H / 2 + 6.5);
+  doc.text("Financial Services (Pty) Ltd  ·  FSP No. 55118", MARGIN, HEADER_H / 2 + 5);
 
   // "CONFIDENTIAL" badge top-right
   doc.setFillColor(255, 255, 255);
@@ -209,9 +209,7 @@ function addCeoSignature(doc, ceoSigB64, y) {
 
 async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childData, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [ceoSigB64] = await Promise.all([
-    fetchImageBase64(CEO_SIGNATURE_URL),
-  ]);
+  const ceoSigB64 = await fetchImageBase64(CEO_SIGNATURE_URL);
 
   const parentName = [parentProfile?.firstName, parentProfile?.lastName].filter(Boolean).join(" ") || "—";
   const parentId = parentProfile?.idNumber || "—";
@@ -365,9 +363,7 @@ async function buildSameAddressPdf({ parentProfile, coGuardianProfiles, childDat
 
 async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, childData, childAddress, signatureDataUrl, signedAt }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const [ceoSigB64] = await Promise.all([
-    fetchImageBase64(CEO_SIGNATURE_URL),
-  ]);
+  const ceoSigB64 = await fetchImageBase64(CEO_SIGNATURE_URL);
 
   const parentName = [parentProfile?.firstName, parentProfile?.lastName].filter(Boolean).join(" ") || "—";
   const parentId = parentProfile?.idNumber || "—";
@@ -513,19 +509,6 @@ async function buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, chi
   return doc.output("arraybuffer");
 }
 
-// ─── Download helper ──────────────────────────────────────────────────────────
-
-function downloadPdf(pdfBuffer, filename) {
-  const blob = new Blob([pdfBuffer], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const SA_PROVINCES = [
@@ -587,6 +570,43 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
     ).then(setCoGuardianProfiles);
   }, [coGuardians]);
 
+  // Init signature pads
+  useEffect(() => {
+    if (answer === "same" && sameCanvasRef.current && !samePadRef.current) {
+      const canvas = sameCanvasRef.current;
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 0) {
+        canvas.width = Math.round(rect.width * ratio);
+        canvas.height = Math.round(rect.height * ratio);
+        canvas.getContext("2d").scale(ratio, ratio);
+      }
+      samePadRef.current = new SignaturePad(canvas, {
+        backgroundColor: "rgb(255,255,255)", penColor: "rgb(30,27,75)", minWidth: 1, maxWidth: 2.5,
+      });
+    }
+  }, [answer]);
+
+  useEffect(() => {
+    if (answer === "different" && addressStep === "sign" && diffCanvasRef.current && !diffPadRef.current) {
+      setTimeout(() => {
+        if (diffCanvasRef.current && !diffPadRef.current) {
+          const canvas = diffCanvasRef.current;
+          const ratio = Math.max(window.devicePixelRatio || 1, 1);
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width > 0) {
+            canvas.width = Math.round(rect.width * ratio);
+            canvas.height = Math.round(rect.height * ratio);
+            canvas.getContext("2d").scale(ratio, ratio);
+          }
+          diffPadRef.current = new SignaturePad(canvas, {
+            backgroundColor: "rgb(255,255,255)", penColor: "rgb(30,27,75)", minWidth: 1, maxWidth: 2.5,
+          });
+        }
+      }, 100);
+    }
+  }, [answer, addressStep]);
+
   async function handleSameSign() {
     if (!samePadRef.current || samePadRef.current.isEmpty()) {
       setError("Please sign the declaration above."); return;
@@ -597,8 +617,8 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
       const signedAt = new Date().toISOString();
       const pdfBuffer = await buildSameAddressPdf({ parentProfile, coGuardianProfiles, childData, signatureDataUrl, signedAt });
       const safeName = (childData?.first_name || "minor").toLowerCase().replace(/\s+/g, "-");
-      downloadPdf(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
       await onComplete({ livesWithParent: true, pdfBuffer, signedAt });
+      downloadPdfBuffer(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
     } catch (e) {
       console.error("[poa]", e);
       setError(e?.message || "Failed to generate declaration. Please try again.");
@@ -622,8 +642,8 @@ export default function MinorProofOfAddressDeclaration({ childData, parentProfil
       const signedAt = new Date().toISOString();
       const pdfBuffer = await buildDifferentAddressPdf({ parentProfile, coGuardianProfiles, childData, childAddress, signatureDataUrl, signedAt });
       const safeName = (childData?.first_name || "minor").toLowerCase().replace(/\s+/g, "-");
-      downloadPdf(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
       await onComplete({ livesWithParent: false, childAddress, pdfBuffer, signedAt });
+      downloadPdfBuffer(pdfBuffer, `mint-address-declaration-${safeName}.pdf`);
     } catch (e) {
       console.error("[poa]", e);
       setError(e?.message || "Failed to generate declaration. Please try again.");

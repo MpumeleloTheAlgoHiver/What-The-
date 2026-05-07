@@ -17,6 +17,7 @@ const PaymentPage = ({
   onOpenDeposit,
   initialMethod,
   fees,
+  childId,
 }) => {
   const { profile } = useProfile();
   const [paymentStatus, setPaymentStatus] = useState(
@@ -133,6 +134,7 @@ const PaymentPage = ({
             paymentReference,
             paymentMethod: finalMethod,
             ...(shareCount ? { shareCount: Number(shareCount) } : {}),
+            ...(childId ? { childUserId: childId } : {}),
             ...(fees ? {
               feesBreakdown: {
                 bufferedBase: fees.bufferedBase,

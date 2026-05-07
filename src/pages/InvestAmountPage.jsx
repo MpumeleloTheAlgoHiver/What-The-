@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ArrowLeft, Info, Plus, Minus, ChevronDown, ChevronUp, X } from "lucide-react";
+import { ArrowLeft, Info, Plus, Minus, ChevronDown, ChevronUp, X, Download } from "lucide-react";
 import { formatCurrency } from "../lib/formatCurrency";
 import PdfViewer from "../components/PdfViewer";
 import { supabase } from "../lib/supabase";
@@ -9,6 +9,15 @@ const BROKER_FEE_RATE = 0.0025;
 const ISIN_FEE_PER_ASSET = 69;
 const TRANSACTION_FEE_RATE = 0.038;
 const CASH_BUFFER_RATE = 0.08;
+const MONTHLY_STRATEGY_FEE = 29;
+
+function firstBillingDate() {
+  const d = new Date();
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + 1);
+  if (d.getDate() < day) d.setDate(0);
+  return d.toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
+}
 
 const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
   const currentStrategy = strategy || {
@@ -16,6 +25,7 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
     tickers: [],
     description: "",
   };
+  const isAdditionalStrategy = !!currentStrategy.isAdditionalStrategy;
 
   const minimumInvestment =
     currentStrategy.calculatedMinInvestment ||
@@ -51,7 +61,7 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
     const totalCost = bufferedBase + brokerAmount + isinTotal + transactionAmount;
     
     return { brokerAmount, isinTotal, transactionAmount, totalCost, bufferedBase };
-  }, [amount, numAssets]);
+  }, [amount, numAssets, isAdditionalStrategy]);
 
   const step = minimumInvestment || 0;
 
@@ -65,7 +75,7 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
     }
   };
 
-  // ── FIX 3: Dynamic info banner text based on payment method ──────────────
+  // ── Dynamic info banner text based on payment method and strategy type ────
   const getInfoText = () => {
     if (paymentMethod === "wallet") {
       return "Your wallet balance will be used to complete this investment instantly.";
@@ -277,11 +287,27 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
                   </p>
                 </div>
               </div>
+              {isAdditionalStrategy && (
+                <div className="flex items-center justify-between pt-1 border-t border-dashed border-violet-100 mt-1">
+                  <div>
+                    <p className="text-xs text-violet-700 font-medium">Monthly Strategy Fee</p>
+                    <p className="text-[10px] text-violet-500">First charge on {firstBillingDate()}</p>
+                  </div>
+                  <p className="text-xs font-semibold text-violet-700">
+                    {formatCurrency(MONTHLY_STRATEGY_FEE, currency)}/month
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
           <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-700">Total Cost</p>
+            <div>
+              <p className="text-xs font-semibold text-slate-700">Total Due Today</p>
+              {isAdditionalStrategy && (
+                <p className="text-[10px] text-violet-600">R29/month billed from {firstBillingDate()}</p>
+              )}
+            </div>
             <p className="text-sm font-bold text-slate-900">
               {formatCurrency(fees.totalCost, currency)}
             </p>
@@ -314,18 +340,32 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
               <p className="text-xs text-slate-600 mt-1">
                 By continuing, you confirm you have reviewed and agree to all
                 terms and conditions
+                {isAdditionalStrategy && (
+                  <span className="text-violet-700 font-medium">, including the R29/month recurring strategy fee</span>
+                )}
               </p>
             </div>
           </label>
         </section>
 
-        {/* Strategy Mandate PDF Modal */}
-        {showMandateModal && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-white">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Strategy Mandate
-              </h2>
+        {/* Strategy Mandate PDF Modal — always mounted so PDF pre-loads in background */}
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-white"
+          style={{ display: showMandateModal ? "flex" : "none" }}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Strategy Mandate
+            </h2>
+            <div className="flex items-center gap-1">
+              <a
+                href="/strategy-disclosures.pdf"
+                download="Strategy-Mandate.pdf"
+                className="p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                aria-label="Download PDF"
+              >
+                <Download className="h-5 w-5 text-slate-600" />
+              </a>
               <button
                 type="button"
                 onClick={() => setShowMandateModal(false)}
@@ -334,14 +374,14 @@ const InvestAmountPage = ({ onBack, strategy, onContinue, paymentMethod }) => {
                 <X className="h-5 w-5 text-slate-600" />
               </button>
             </div>
-            <div className="flex-1 overflow-hidden">
-              <PdfViewer
-                file="/strategy-disclosures.pdf"
-                style={{ height: "100%" }}
-              />
-            </div>
           </div>
-        )}
+          <div className="flex-1 overflow-hidden">
+            <PdfViewer
+              file="/strategy-disclosures.pdf"
+              style={{ height: "100%" }}
+            />
+          </div>
+        </div>
 
         {/* ── FIX 3: Dynamic info banner ── */}
         <div className="mb-6 flex items-start gap-2 rounded-lg bg-violet-50 p-3">

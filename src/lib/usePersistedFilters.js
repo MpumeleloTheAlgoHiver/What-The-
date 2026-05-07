@@ -99,7 +99,9 @@ export function loadOpenStrategiesFilters() {
   }
 }
 
-function buildChipsFromFilters({ risks, exposure, minInvestment, timeHorizon, sectors }) {
+function buildChipsFromFilters(filters) {
+  if (!filters) return [];
+  const { risks, exposure, minInvestment, timeHorizon, sectors } = filters;
   const chips = [];
   if (risks && risks.size) chips.push(...Array.from(risks));
   if (exposure && exposure.size) chips.push(...Array.from(exposure));

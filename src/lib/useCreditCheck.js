@@ -395,10 +395,13 @@ export function useCreditCheck() {
       console.groupEnd();
       setEngineResult(result);
       setEngineStatus(result?.success === false || result?.ok === false ? "Failed" : "Complete");
+      return result;
     } catch (err) {
       console.error("Credit check engine error:", err);
-      setEngineResult({ success: false, error: err.message || "Network error" });
+      const errResult = { success: false, error: err.message || "Network error" };
+      setEngineResult(errResult);
       setEngineStatus("Failed");
+      return errResult;
     }
   }, [form, normalizedContractType, loanRecord]);
 
@@ -421,7 +424,9 @@ export function useCreditCheck() {
       loanEngineScore: score,
       creditScore: dbRow.experian_score ?? result.creditScore ?? null,
       scoreReasons: dbRow.score_reasons || result.scoreReasons || [],
-      breakdown: result,
+      // result may be the flat engineResultPayload (factor keys at top level) or
+      // a full API response that already has a nested .breakdown key — handle both.
+      breakdown: result.breakdown || result,
       creditExposure: {
         totalBalance: dbRow.exposure_total_balance ?? null,
         totalLimits: dbRow.exposure_total_limit ?? null,

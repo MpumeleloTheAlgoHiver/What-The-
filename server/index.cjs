@@ -34,6 +34,8 @@ const { Pool } = require("pg");
 const truIDClient = require("./truidClient.cjs");
 const { Resend } = require("resend");
 const { runFuneralCoverMigration } = require("./funeralCoverMigration.cjs");
+const { runStrategySubscriptionMigration } = require("./strategySubscriptionMigration.cjs");
+const cron = require("node-cron");
 
 // Helper to check both standard and VITE_ prefixed env vars
 const readEnv = (key) => process.env[key] || process.env[`VITE_${key}`];
@@ -626,6 +628,68 @@ async function ensureUserSessionsTable() {
 }
 ensureUserSessionsTable();
 runFuneralCoverMigration(pgPool);
+runStrategySubscriptionMigration(pgPool, supabaseAdmin, supabase);
+
+// ── Monthly strategy subscription billing cron ─────────────────────────────
+// Runs daily at 22:00 UTC (midnight SAST). Charges R29 for each due subscription.
+cron.schedule("0 22 * * *", async () => {
+  console.log("[strategy-sub-cron] Running subscription billing check...");
+  const db = supabaseAdmin || supabase;
+  if (!db) { console.warn("[strategy-sub-cron] No db client — skipping"); return; }
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const { data: dueSubs, error: fetchErr } = await db
+    .from("subscriptions")
+    .select("id, user_id, plan, amount, current_period_end")
+    .eq("status", "active")
+    .lte("current_period_end", today);
+
+  if (fetchErr) { console.error("[strategy-sub-cron] Fetch error:", fetchErr.message); return; }
+  if (!dueSubs || dueSubs.length === 0) { console.log("[strategy-sub-cron] No subscriptions due today."); return; }
+
+  console.log(`[strategy-sub-cron] Processing ${dueSubs.length} subscription(s)...`);
+
+  for (const sub of dueSubs) {
+    try {
+      const amountRands = Number(sub.amount || 29);
+
+      // Deduct from wallet (allow negative balance)
+      const { data: wallet } = await db.from("wallets").select("balance").eq("user_id", sub.user_id).maybeSingle();
+      const currentBalance = wallet ? Number(wallet.balance) : 0;
+      const newBalance = currentBalance - amountRands;
+      await db.from("wallets").upsert({ user_id: sub.user_id, balance: newBalance }, { onConflict: "user_id" });
+
+      // Record transaction
+      const now = new Date().toISOString();
+      await db.from("transactions").insert({
+        user_id: sub.user_id,
+        direction: "debit",
+        name: `Strategy Subscription Fee: ${sub.plan || "Strategy"}`,
+        description: `Monthly R${amountRands} subscription fee for ${sub.plan || "strategy"}`,
+        amount: Math.round(amountRands * 100),
+        store_reference: `sub-${sub.id}-${today}`,
+        currency: "ZAR",
+        status: "posted",
+        transaction_date: now,
+        created_at: now,
+      });
+
+      // Advance current_period_end by one month
+      const billing = new Date(sub.current_period_end);
+      const day = billing.getDate();
+      billing.setMonth(billing.getMonth() + 1);
+      if (billing.getDate() < day) billing.setDate(0);
+      const nextDate = billing.toISOString().split("T")[0];
+
+      await db.from("subscriptions").update({ current_period_end: nextDate, updated_at: now }).eq("id", sub.id);
+
+      console.log(`[strategy-sub-cron] Billed R${amountRands} for user ${sub.user_id} (${sub.plan}). New balance: R${newBalance}. Next billing: ${nextDate}`);
+    } catch (err) {
+      console.error(`[strategy-sub-cron] Error processing sub ${sub.id}:`, err.message);
+    }
+  }
+});
 
 function generateChildMintNumber(firstName, idNumber, dateOfBirth) {
   const normalized = (firstName || 'CHD').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -2733,6 +2797,72 @@ app.post("/api/reconcile-payments", async (req, res) => {
   }
 });
 
+// ── GET user's strategy subscriptions ─────────────────────────────────────
+app.get("/api/user/strategy-subscriptions", async (req, res) => {
+  try {
+    const { user, error: authError } = await authenticateUser(req);
+    if (authError || !user) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const token = (req.headers.authorization || "").replace("Bearer ", "");
+    const db = getAuthenticatedDb(token);
+
+    const { data: subs, error: subsErr } = await db
+      .from("subscriptions")
+      .select("id, user_id, plan, amount, currency, current_period_end, status, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (subsErr) {
+      console.error("[strategy-subscriptions] GET error:", subsErr.message);
+      return res.status(500).json({ success: false, error: subsErr.message });
+    }
+
+    return res.json({ success: true, subscriptions: subs || [] });
+  } catch (err) {
+    console.error("[strategy-subscriptions] GET error:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── PATCH update strategy subscription status ──────────────────────────────
+app.patch("/api/user/strategy-subscriptions/:id", async (req, res) => {
+  try {
+    const { user, error: authError } = await authenticateUser(req);
+    if (authError || !user) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!["active", "cancelled"].includes(status)) {
+      return res.status(400).json({ success: false, error: "status must be 'active' or 'cancelled'" });
+    }
+
+    const token = (req.headers.authorization || "").replace("Bearer ", "");
+    const db = getAuthenticatedDb(token);
+
+    const { data, error: updateErr } = await db
+      .from("subscriptions")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("id, status")
+      .maybeSingle();
+
+    if (updateErr) {
+      console.error("[strategy-subscriptions] PATCH error:", updateErr.message);
+      return res.status(500).json({ success: false, error: updateErr.message });
+    }
+    if (!data) {
+      return res.status(404).json({ success: false, error: "Subscription not found" });
+    }
+
+    console.log(`[strategy-subscriptions] User ${user.id} set subscription ${id} to ${status}`);
+    return res.json({ success: true, subscription: data });
+  } catch (err) {
+    console.error("[strategy-subscriptions] PATCH error:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post("/api/record-investment", async (req, res) => {
   try {
     console.log("[record-investment] === ENDPOINT CALLED ===");
@@ -2759,9 +2889,9 @@ app.post("/api/record-investment", async (req, res) => {
     console.log("[record-investment] Parsed fields - securityId:", securityId, "symbol:", symbol, "name:", name, "amount:", amount, "baseAmount:", baseAmount, "strategyId:", strategyId, "paymentReference:", paymentReference, "shareCount:", shareCount, "paymentMethod:", paymentMethod);
     console.log("[record-investment] Fees breakdown:", feesBreakdown);
 
-    if (!securityId || !amount || !paymentReference) {
-      console.log("[record-investment] MISSING FIELDS - securityId:", !!securityId, "amount:", !!amount, "paymentReference:", !!paymentReference);
-      return res.status(400).json({ success: false, error: "Missing required fields: securityId, amount, paymentReference" });
+    if ((!securityId && !strategyId) || !amount || Number(amount) <= 0 || !paymentReference) {
+      console.log("[record-investment] MISSING FIELDS - securityId:", !!securityId, "strategyId:", !!strategyId, "amount:", !!amount, "paymentReference:", !!paymentReference);
+      return res.status(400).json({ success: false, error: "Missing required fields: securityId or strategyId, amount, paymentReference" });
     }
 
     let payData = { amount: Math.round(amount * 100) };
@@ -3206,6 +3336,47 @@ app.post("/api/record-investment", async (req, res) => {
         }
       } catch (usErr) {
         console.error("[record-investment] user_strategies upsert failed:", usErr.message);
+      }
+
+      // Also upsert into Supabase subscriptions table so the Manage Subscriptions page shows it
+      try {
+        const strategyName = name || symbol || "Strategy Subscription";
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        const nextBilling = nextMonth.toISOString().split("T")[0];
+
+        // Use user-authenticated client so RLS allows the insert (auth.uid() = user_id)
+        const userToken = req.headers.authorization?.replace("Bearer ", "");
+        const subDb = userToken && SUPABASE_URL && SUPABASE_ANON_KEY
+          ? (() => { const { createClient: cc } = require('@supabase/supabase-js'); return cc(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${userToken}` } } }); })()
+          : db;
+
+        const { data: existingSub } = await subDb
+          .from("subscriptions")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("plan", strategyName)
+          .maybeSingle();
+
+        if (!existingSub) {
+          const { error: subInsertErr } = await subDb.from("subscriptions").insert({
+            user_id: userId,
+            plan: strategyName,
+            amount: 29,
+            currency: "ZAR",
+            current_period_end: nextBilling,
+            status: "active",
+          });
+          if (subInsertErr) {
+            console.warn("[record-investment] subscriptions insert error:", subInsertErr.message);
+          } else {
+            console.log("[record-investment] subscriptions record created for strategy:", strategyName);
+          }
+        } else {
+          console.log("[record-investment] subscriptions record already exists for strategy:", strategyName);
+        }
+      } catch (subErr) {
+        console.warn("[record-investment] Could not write subscriptions:", subErr.message);
       }
     }
 
@@ -4282,14 +4453,14 @@ app.post("/api/credit-check", async (req, res) => {
       computeCreditScoreContribution,
       computeAdverseListingsContribution,
       computeCreditUtilizationContribution,
-      computeDeviceFingerprintContribution,
       computeDTIContribution,
       computeEmploymentTenureContribution,
       computeContractTypeContribution,
       computeEmploymentCategoryContribution,
       computeIncomeStabilityContribution,
-      computeAlgolendRepaymentContribution,
-      computeAglRetrievalContribution
+      summarizeTruidSummaryData,
+      computeBankStatementCashflowsContribution,
+      computeAlgoHiveBehaviouralContribution
     } = await import("../services/loanEngine.js");
 
     let body = req.body || {};
@@ -4359,15 +4530,34 @@ app.post("/api/credit-check", async (req, res) => {
       try {
         const { data: snapshotData } = await db
           .from('truid_bank_snapshots')
-          .select('months_captured,main_salary')
+          .select('months_captured,main_salary,avg_monthly_income,avg_monthly_expenses,net_monthly_income,summary_data')
           .eq('user_id', userId)
           .order('captured_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (snapshotData) {
+          const truidSummary = summarizeTruidSummaryData(snapshotData.summary_data || []);
           normalizedOverrides.truid_months_captured = snapshotData.months_captured;
           normalizedOverrides.truid_main_salary = snapshotData.main_salary;
+          normalizedOverrides.truid_summary_data = snapshotData.summary_data;
+          normalizedOverrides.truid_avg_monthly_income = truidSummary.monthCount
+            ? truidSummary.averageMonthlyIncome
+            : snapshotData.avg_monthly_income;
+          normalizedOverrides.truid_avg_monthly_expenses = truidSummary.monthCount
+            ? truidSummary.averageMonthlyExpenses
+            : snapshotData.avg_monthly_expenses;
+          normalizedOverrides.truid_net_monthly_income = truidSummary.monthCount
+            ? truidSummary.averageMonthlyNetCashflow
+            : snapshotData.net_monthly_income;
+          normalizedOverrides.truid_average_monthly_debt_repayments = truidSummary.averageMonthlyDebtRepayments;
+
+          if (truidSummary.monthCount) {
+            normalizedOverrides.annual_income = truidSummary.averageMonthlyIncome * 12;
+            normalizedOverrides.annual_expenses = truidSummary.averageMonthlyExpenses * 12;
+            normalizedOverrides.gross_monthly_income = truidSummary.incomeForDti;
+            normalizedOverrides.net_monthly_income = truidSummary.averageMonthlyNetCashflow;
+          }
         }
       } catch (err) {
         console.warn('TruID snapshot lookup failed:', err?.message);
@@ -4387,6 +4577,7 @@ app.post("/api/credit-check", async (req, res) => {
 
         const pack = packRow?.pack_details || {};
         const info = pack?.info || {};
+        const review = pack?.review || pack?.reviewResult || pack?.inspectionResult || {};
         const addresses = Array.isArray(info?.addresses) ? info.addresses : [];
         const idDocs = Array.isArray(info?.idDocs) ? info.idDocs : [];
 
@@ -4403,6 +4594,7 @@ app.post("/api/credit-check", async (req, res) => {
         const packFirstName = info?.firstNameEn || info?.firstName || idCardDoc?.firstNameEn || idCardDoc?.firstName || null;
         const packLastName = info?.lastNameEn || info?.lastName || idCardDoc?.lastNameEn || idCardDoc?.lastName || null;
         const packPhone = pack?.phone || null;
+        const kycResult = review?.reviewAnswer || review?.answer || review?.reviewResult || review?.status || null;
 
         console.log('[credit-check] pack_details extracted:', {
           packPostalCode,
@@ -4435,6 +4627,10 @@ app.post("/api/credit-check", async (req, res) => {
         if (!normalizedOverrides.address4 && packTown) normalizedOverrides.address4 = packTown;
         if (!normalizedOverrides.postal_code && packPostalCode) normalizedOverrides.postal_code = String(packPostalCode);
         if (!normalizedOverrides.cell_tel_no && packPhone) normalizedOverrides.cell_tel_no = packPhone;
+        normalizedOverrides.kyc_has_pack_details = Boolean(packRow?.pack_details);
+        normalizedOverrides.kyc_identity_verified = Boolean(packIdentity);
+        normalizedOverrides.kyc_address_verified = Boolean(packPostalCode || packStreet || packFormatted);
+        if (!normalizedOverrides.kyc_result && kycResult) normalizedOverrides.kyc_result = kycResult;
 
         if (!normalizedOverrides.address1 && packFormatted) {
           normalizedOverrides.address1 = packFormatted;
@@ -4600,22 +4796,28 @@ app.post("/api/credit-check", async (req, res) => {
     const creditScoreBreakdown = computeCreditScoreContribution(creditScoreValue);
     const adverseListingsBreakdown = computeAdverseListingsContribution(creditScoreData);
     const creditUtilizationBreakdown = computeCreditUtilizationContribution(accountMetrics);
-    const deviceFingerprintBreakdown = computeDeviceFingerprintContribution(deviceFingerprint);
-    const dtiBreakdown = computeDTIContribution(accountMetrics.totalMonthlyInstallment || 0, Number(userPayload.gross_monthly_income || 0));
+    const dtiBreakdown = computeDTIContribution(
+      accountMetrics.totalMonthlyInstallment || 0,
+      Number(userPayload.gross_monthly_income || 0),
+      userPayload
+    );
     const employmentTenureBreakdown = computeEmploymentTenureContribution(userPayload.months_in_current_job);
     const contractTypeBreakdown = computeContractTypeContribution(userPayload.contract_type);
     const employmentCategoryBreakdown = computeEmploymentCategoryContribution(userPayload);
     const incomeStabilityBreakdown = computeIncomeStabilityContribution(userPayload);
-    const algolendRepaymentBreakdown = computeAlgolendRepaymentContribution(userPayload.algolend_is_new_borrower);
-    const aglRetrievalBreakdown = computeAglRetrievalContribution();
+    const bankStatementCashflowsBreakdown = computeBankStatementCashflowsContribution(userPayload);
+    const algoHiveBehaviouralBreakdown = computeAlgoHiveBehaviouralContribution(userPayload, deviceFingerprint);
 
     const breakdown = {
       creditScore: creditScoreBreakdown, creditUtilization: creditUtilizationBreakdown,
-      adverseListings: adverseListingsBreakdown, deviceFingerprint: deviceFingerprintBreakdown,
-      dti: dtiBreakdown, employmentTenure: employmentTenureBreakdown,
-      contractType: contractTypeBreakdown, employmentCategory: employmentCategoryBreakdown,
-      incomeStability: incomeStabilityBreakdown, algolendRepayment: algolendRepaymentBreakdown,
-      aglRetrieval: aglRetrievalBreakdown
+      adverseListings: adverseListingsBreakdown,
+      incomeStability: incomeStabilityBreakdown,
+      dti: dtiBreakdown,
+      bankStatementCashflows: bankStatementCashflowsBreakdown,
+      employmentTenure: employmentTenureBreakdown,
+      employmentCategory: employmentCategoryBreakdown,
+      contractType: contractTypeBreakdown,
+      algoHiveBehavioural: algoHiveBehaviouralBreakdown
     };
 
     const experianSnapshot = {

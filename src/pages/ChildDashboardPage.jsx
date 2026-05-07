@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowLeft, ArrowUpRight, ArrowDownLeft, X, TrendingUp, TrendingDown,
-  ShieldCheck, Baby, Wallet, BarChart3, ChevronRight,
+  ArrowLeft, ArrowUpRight, ArrowDownLeft, X,
+  Wallet, BarChart3, ChevronRight,
   RefreshCw, Search, Star, AlertCircle, Check, ClipboardList,
+  BookOpen, LayoutGrid, ArrowDownToLine, Target,
 } from "lucide-react";
+import SwipeableBalanceCard from "../components/SwipeableBalanceCard";
 import { useProfile } from "../lib/useProfile";
 import { supabase } from "../lib/supabase";
 import MinorProofOfAddressDeclaration from "../components/MinorProofOfAddressDeclaration";
 import ChildResponsibilityAgreement from "../components/ChildResponsibilityAgreement";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getAge(dob) {
   if (!dob) return null;
@@ -27,8 +29,7 @@ function fmt(cents) {
   return `R\u202F${val.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-
-// ─── Animation variants ─────────────────────────────────────────────────────
+// â”€â”€â”€ Animation variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const container = {
   hidden: {},
@@ -38,22 +39,6 @@ const item = {
   hidden: { opacity: 0, y: 16, scale: 0.98 },
   show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 340, damping: 28 } },
 };
-
-// ─── Avatar ──────────────────────────────────────────────────────────────────
-
-function Avatar({ name, gradient, size = "h-14 w-14", text = "text-xl" }) {
-  const initial = (name || "?")[0].toUpperCase();
-  return (
-    <div
-      className={`${size} rounded-2xl flex items-center justify-center font-bold text-white flex-shrink-0`}
-      style={{ background: gradient, aspectRatio: "1" }}
-    >
-      <span className={text}>{initial}</span>
-    </div>
-  );
-}
-
-// ─── Transfer Modal (bottom-sheet) ───────────────────────────────────────────
 
 function TransferModal({ child, parentBalance, balancesLoading, onTransfer, onClose }) {
   const [amount, setAmount] = useState("");
@@ -135,14 +120,14 @@ function TransferModal({ child, parentBalance, balancesLoading, onTransfer, onCl
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Your Wallet</p>
                   <p className="text-sm font-bold text-slate-900 tabular-nums mt-0.5">
-                    {balancesLoading ? "Loading…" : fmt(parentBalance)}
+                    {balancesLoading ? "Loadingâ€¦" : fmt(parentBalance)}
                   </p>
                 </div>
                 <ArrowUpRight className="h-4 w-4 text-slate-300" />
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{child.first_name}'s Wallet</p>
                   <p className="text-sm font-bold text-slate-900 tabular-nums mt-0.5">
-                    {balancesLoading ? "Loading…" : fmt(child.available_balance || 0)}
+                    {balancesLoading ? "Loadingâ€¦" : fmt(child.available_balance || 0)}
                   </p>
                 </div>
               </div>
@@ -198,7 +183,7 @@ function TransferModal({ child, parentBalance, balancesLoading, onTransfer, onCl
                 className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
                 style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)" }}
               >
-                {saving ? "Transferring…" : `Transfer R${numAmount.toFixed(2)}`}
+                {saving ? "Transferringâ€¦" : `Transfer R${numAmount.toFixed(2)}`}
               </button>
             </>
           ) : (
@@ -229,21 +214,22 @@ function TransferModal({ child, parentBalance, balancesLoading, onTransfer, onCl
   );
 }
 
-// ─── Invest Modal (bottom-sheet) — browse strategies & invest ────────────────
+// â”€â”€â”€ Invest Modal (bottom-sheet) â€” browse strategies & invest â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function InvestModal({ child, onInvest, onClose }) {
   const [strategies, setStrategies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
-  const [amount, setAmount] = useState("");
+  const [units, setUnits] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   const childBalance = child.available_balance || 0;
-  const numAmount = parseFloat(amount) || 0;
-  const amountCents = Math.round(numAmount * 100);
+  const minInvCents = selected?.min_investment || 0;
+  const amountCents = units * minInvCents;
+  const numAmount = amountCents / 100;
   const insufficient = amountCents > childBalance;
 
   useEffect(() => {
@@ -268,7 +254,6 @@ function InvestModal({ child, onInvest, onClose }) {
       const allSymbols = [...new Set(
         rows.flatMap(s => (Array.isArray(s.holdings) ? s.holdings : []).map(h => h.symbol || h.ticker).filter(Boolean))
       )];
-
       let secMap = {};
       if (allSymbols.length > 0) {
         const { data: secs } = await supabase
@@ -278,7 +263,6 @@ function InvestModal({ child, onInvest, onClose }) {
         (secs || []).forEach(s => { secMap[s.symbol] = s; });
       }
 
-      // Enrich each strategy with sorted metrics + holding logos
       const enriched = rows.map(s => {
         const metrics = Array.isArray(s.strategy_metrics)
           ? [...s.strategy_metrics].sort((a, b) => (b.as_of_date || "").localeCompare(a.as_of_date || ""))[0]
@@ -298,14 +282,8 @@ function InvestModal({ child, onInvest, onClose }) {
 
   async function handleInvest() {
     if (!selected) return;
-    if (numAmount <= 0) { setError("Enter a valid amount."); return; }
+    if (amountCents <= 0) { setError("Select a valid investment amount."); return; }
     if (insufficient) { setError("Insufficient funds in child's wallet."); return; }
-
-    const minInv = (selected.min_investment || 0);
-    if (amountCents < minInv) {
-      setError(`Minimum investment is ${fmt(minInv)}.`);
-      return;
-    }
 
     setSaving(true);
     setError("");
@@ -357,7 +335,7 @@ function InvestModal({ child, onInvest, onClose }) {
                 <div className="flex items-center gap-3">
                   {selected && (
                     <button
-                      onClick={() => { setSelected(null); setAmount(""); setError(""); }}
+                      onClick={() => { setSelected(null); setUnits(1); setError(""); }}
                       className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition active:scale-95 mr-1"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
@@ -400,7 +378,7 @@ function InvestModal({ child, onInvest, onClose }) {
                       type="text"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search strategies…"
+                      placeholder="Search strategies..."
                       className={inputCls + " pl-10"}
                     />
                   </div>
@@ -444,13 +422,13 @@ function InvestModal({ child, onInvest, onClose }) {
                               <div className="flex-1 min-w-0 space-y-0.5">
                                 <p className="text-sm font-semibold text-slate-900 truncate">{s.short_name || s.name}</p>
                                 <p className="text-xs text-slate-500 line-clamp-1">
-                                  {s.risk_level || "Balanced"}{s.description ? ` • ${s.description.substring(0, 60)}${s.description.length > 60 ? "…" : ""}` : ""}
+                                  {s.risk_level || "Balanced"}{s.description ? ` â€¢ ${s.description.substring(0, 60)}${s.description.length > 60 ? "â€¦" : ""}` : ""}
                                 </p>
                                 {s.min_investment > 0 && (
                                   <p className="text-[11px] text-slate-400">Min. {fmt(s.min_investment)}</p>
                                 )}
                               </div>
-                              {/* Simple sparkline SVG */}
+                              {/* Sparkline */}
                               <div className="flex-shrink-0 rounded-xl bg-slate-50 px-2 py-1.5">
                                 <svg width="64" height="32" viewBox="0 0 64 32">
                                   <defs>
@@ -471,26 +449,18 @@ function InvestModal({ child, onInvest, onClose }) {
                                 </svg>
                               </div>
                             </div>
-
                             {/* Badges */}
                             <div className="flex flex-wrap gap-1.5 mb-3">
                               {s.risk_level && (
-                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                                  {s.risk_level}
-                                </span>
+                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">{s.risk_level}</span>
                               )}
                               {s.sector && (
-                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                                  {s.sector}
-                                </span>
+                                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">{s.sector}</span>
                               )}
                               {s.is_featured && (
-                                <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-600">
-                                  Featured
-                                </span>
+                                <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-600">Featured</span>
                               )}
                             </div>
-
                             {/* YTD return */}
                             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 mb-3">
                               <span className="text-xs font-semibold text-slate-600">YTD return</span>
@@ -500,7 +470,7 @@ function InvestModal({ child, onInvest, onClose }) {
                                     {isUp ? "+" : ""}{ytdPct.toFixed(2)}%
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-slate-400">—</span>
+                                  <span className="text-xs text-slate-400">â€”</span>
                                 )}
                                 {s.ytd_as_of_date && (
                                   <span className="text-[10px] text-slate-400">
@@ -509,7 +479,6 @@ function InvestModal({ child, onInvest, onClose }) {
                                 )}
                               </div>
                             </div>
-
                             {/* Holdings snapshot */}
                             {s.holdingsList?.length > 0 && (
                               <div className="flex items-center gap-2">
@@ -613,32 +582,35 @@ function InvestModal({ child, onInvest, onClose }) {
                   </div>
 
                   <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 ml-0.5">
-                    Investment Amount (ZAR)
+                    Units to invest
                   </label>
-                  <div className="relative mb-4">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-slate-400">R</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-lg font-bold text-slate-800 text-center placeholder-slate-400 focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition tabular-nums pl-10"
-                      autoFocus
-                    />
+
+                  {/* Unit stepper */}
+                  <div className="flex items-center justify-center gap-6 py-4 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setUnits(u => Math.max(1, u - 1))}
+                      disabled={units <= 1}
+                      className="h-12 w-12 rounded-full bg-slate-100 text-slate-700 text-2xl font-bold flex items-center justify-center transition active:scale-90 disabled:opacity-40"
+                    >−</button>
+                    <div className="text-center min-w-[60px]">
+                      <p className="text-4xl font-bold text-slate-900 tabular-nums">{units}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">unit{units !== 1 ? "s" : ""}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUnits(u => u + 1)}
+                      className="h-12 w-12 rounded-full bg-violet-600 text-white text-2xl font-bold flex items-center justify-center transition active:scale-90"
+                    >+</button>
                   </div>
 
-                  {/* Quick amounts */}
-                  <div className="flex gap-2 mb-5">
-                    {[100, 250, 500, 1000].map((v) => (
-                      <button
-                        key={v}
-                        onClick={() => setAmount(String(v))}
-                        className="flex-1 rounded-lg py-2 text-xs font-bold text-purple-600 bg-purple-50 border border-purple-100 hover:bg-purple-100 transition active:scale-95"
-                      >
-                        R{v}
-                      </button>
-                    ))}
+                  {/* Price breakdown */}
+                  <div className="flex items-center justify-center gap-1.5 text-sm mb-5 text-slate-500">
+                    <span className="font-semibold text-slate-700">{fmt(minInvCents)}</span>
+                    <span>×</span>
+                    <span className="font-semibold text-slate-700">{units}</span>
+                    <span>=</span>
+                    <span className="font-bold text-violet-700 text-base">{fmt(amountCents)}</span>
                   </div>
 
                   {/* Strategy info */}
@@ -678,7 +650,7 @@ function InvestModal({ child, onInvest, onClose }) {
                     className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
                     style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)" }}
                   >
-                    {saving ? "Investing…" : `Invest R${numAmount.toFixed(2)}`}
+                    {saving ? "Investingâ€¦" : `Invest R${numAmount.toFixed(2)}`}
                   </button>
                 </div>
               )}
@@ -711,7 +683,10 @@ function InvestModal({ child, onInvest, onClose }) {
   );
 }
 
-// ─── TransactionRow ──────────────────────────────────────────────────────────
+
+
+
+// â”€â”€â”€ TransactionRow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function TransactionRow({ tx }) {
   const isCredit = tx.direction === "credit";
@@ -734,7 +709,8 @@ function TransactionRow({ tx }) {
   );
 }
 
-// ─── CompleteProfileModal ────────────────────────────────────────────────────
+// â”€â”€â”€ CompleteProfileModal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
   const poaComplete = !!child.poa_declaration_url;
@@ -782,7 +758,7 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
       if (!child.poa_declaration_url) { setStep("poa"); }
       else if (!child.signed_agreement_url) { setStep("agreement"); }
       else {
-        // All steps already done — mark address_completed
+        // All steps already done â€” mark address_completed
         await fetch(`/api/family-members/${child.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -802,14 +778,18 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
       let poaUrl = null;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token && livesWithParent && pdfBuffer) {
+      if (!token && pdfBuffer) {
         throw new Error("Session expired. Please sign in again.");
       }
 
-      if (livesWithParent && pdfBuffer) {
+      if (pdfBuffer) {
+        // Use chunked fromCharCode to avoid freezing the JS thread on mobile
         const uint8 = new Uint8Array(pdfBuffer);
+        const CHUNK = 0x8000;
         let bin = "";
-        for (let i = 0; i < uint8.length; i++) bin += String.fromCharCode(uint8[i]);
+        for (let i = 0; i < uint8.length; i += CHUNK) {
+          bin += String.fromCharCode.apply(null, uint8.subarray(i, i + CHUNK));
+        }
         const pdfBase64 = btoa(bin);
         const res = await fetch("/api/onboarding/upload-agreement", {
           method: "POST",
@@ -821,7 +801,7 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
           throw new Error(j?.error || "Failed to upload proof of address.");
         }
         poaUrl = j.publicUrl;
-      } else if (!livesWithParent && fileUpload && supabase) {
+      } else if (fileUpload && supabase) {
         const safeName = fileUpload.name.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9._-]/g, "");
         const path = `poa/${child.id}/${Date.now()}-${safeName}`;
         const { error: upErr } = await supabase.storage
@@ -929,7 +909,7 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
               <div>
                 <p className="text-base font-bold text-slate-900">Complete Profile</p>
                 <p className="text-xs text-slate-400">
-                  {step === "id" ? "Step 1 — ID number" :
+                  {step === "id" ? "Step 1 â€” ID number" :
                    step === "poa" ? "Proof of address" :
                    "Responsibility agreement"}
                 </p>
@@ -968,7 +948,7 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
                 className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
                 style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)" }}
               >
-                {saving ? "Saving…" : "Save & Continue"}
+                {saving ? "Savingâ€¦" : "Save & Continue"}
               </button>
             </div>
           )}
@@ -1003,9 +983,9 @@ function CompleteProfileModal({ child, parentProfile, onUpdate, onClose }) {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// ─── Main Page ──────────────────════════════════════════════════════════════
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 export default function ChildDashboardPage({ child: initialChild, onBack }) {
   const { profile } = useProfile();
@@ -1088,9 +1068,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
       // Enrich with security info (symbol/name/logo_url live on securities_c)
       const securityIds = [...new Set(baseRows.map(h => h.security_id).filter(Boolean))];
-      const strategyIds = [...new Set(baseRows.map(h => h.strategy_id).filter(Boolean))];
       let secMap = {};
-      let stratMap = {};
       if (securityIds.length > 0) {
         const { data: secs } = await supabase
           .from("securities_c")
@@ -1098,29 +1076,22 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
           .in("id", securityIds);
         (secs || []).forEach(s => { secMap[s.id] = s; });
       }
-      if (strategyIds.length > 0) {
-        const { data: strats } = await supabase
-          .from("strategies_c")
-          .select("id, name, short_name, description, risk_level, min_investment, is_kid_strategy, is_featured, holdings, strategy_metrics(*)")
-          .in("id", strategyIds);
-        (strats || []).forEach(s => {
-          const metrics = Array.isArray(s.strategy_metrics)
-            ? [...s.strategy_metrics].sort((a, b) => (b.as_of_date || "").localeCompare(a.as_of_date || ""))[0]
-            : s.strategy_metrics;
-          const r_ytd = metrics?.r_ytd ?? metrics?.r_ytd_pct ?? metrics?.r_1y ?? null;
-          const ytd_as_of_date = metrics?.as_of_date ?? null;
-          const holdingsList = (Array.isArray(s.holdings) ? s.holdings : [])
-            .sort((a, b) => (b.weight || 0) - (a.weight || 0));
-          stratMap[s.id] = { ...s, r_ytd, ytd_as_of_date, holdingsList };
-        });
-      }
       const rows = baseRows.map(h => {
         const sec = secMap[h.security_id] || {};
         return { ...h, symbol: sec.symbol || null, name: sec.name || null, logo_url: sec.logo_url || null };
       });
-      if (isMounted.current) {
-        setHoldings(rows);
-        setStrategyMap(stratMap);
+      if (isMounted.current) setHoldings(rows);
+
+      // Fetch strategy names for any strategy holdings
+      const stratIds = [...new Set(rows.map(h => h.strategy_id).filter(Boolean))];
+      if (stratIds.length > 0) {
+        const { data: strats } = await supabase
+          .from("strategies_c")
+          .select("id, name, short_name, risk_level, is_featured")
+          .in("id", stratIds);
+        const map = {};
+        (strats || []).forEach(s => { map[s.id] = s; });
+        if (isMounted.current) setStrategyMap(map);
       }
     } catch (e) { console.error("[child-dash] holdings", e); }
   }
@@ -1188,17 +1159,9 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
     fetchTransactions();
   }
 
-  // stock_holdings_c.market_value and avg_fill are stored in CENTS.
-  // Per MINT Frontend Playbook: divide by 100 only for display.
-  const totalPortfolioCents = holdings.reduce((s, h) => s + Number(h.market_value || 0), 0);
-  const totalPnlCents = holdings.reduce((s, h) => {
-    const costCents = Number(h.avg_fill || 0) * Number(h.quantity || 0);
-    const marketCents = Number(h.market_value || 0);
-    return s + (marketCents - costCents);
-  }, 0);
-  const totalCostCentsAll = totalPortfolioCents - totalPnlCents;
-  const pnlPct = totalCostCentsAll > 0 ? (totalPnlCents / totalCostCentsAll) * 100 : 0;
-  const isPortUp = totalPnlCents >= 0;
+  // market_value and avg_fill are stored in rands; convert to cents for fmt
+  const totalPortfolioCents = holdings.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
+
 
   // Group holdings by strategy
   const strategyGroups = holdings.reduce((acc, h) => {
@@ -1210,48 +1173,27 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
 
   const strategyCards = Object.entries(strategyGroups).map(([sid, hs]) => {
     const strat = strategyMap[sid] || {};
-    const totalValueCents = hs.reduce((s, h) => s + Number(h.market_value || 0), 0);
-    const totalCostCents = hs.reduce((s, h) => s + Number(h.avg_fill || 0) * Number(h.quantity || 0), 0);
+    const totalValueCents = hs.reduce((s, h) => s + Math.round((h.market_value || 0) * 100), 0);
+    const totalCostCents = hs.reduce((s, h) => s + Math.round(Number(h.avg_fill || 0) * Number(h.quantity || 0) * 100), 0);
     const pnlCents = totalValueCents - totalCostCents;
     const pnlP = totalCostCents > 0 ? (pnlCents / totalCostCents) * 100 : 0;
-    return {
-      id: sid,
-      name: strat.name || "Strategy",
-      short_name: strat.short_name,
-      risk_level: strat.risk_level,
-      is_featured: strat.is_featured,
-      totalValue: totalValueCents,
-      pnl: pnlCents,
-      pnlPct: pnlP,
-      holdings: hs,
-      r_ytd: strat.r_ytd ?? null,
-      ytd_as_of_date: strat.ytd_as_of_date ?? null,
-      holdingsList: strat.holdingsList || [],
-    };
+    return { id: sid, name: strat.name || "Strategy", short_name: strat.short_name, risk_level: strat.risk_level, is_featured: strat.is_featured, totalValue: totalValueCents, pnl: pnlCents, pnlPct: pnlP, holdings: hs };
   });
 
   // Best performing individual assets (top 5 by unrealized_pnl %)
   const bestAssets = [...holdings]
     .filter(h => h.symbol && h.market_value > 0)
     .map(h => {
-      const costCents = Number(h.avg_fill || 0) * Number(h.quantity || 0);
-      const marketCents = Number(h.market_value || 0);
-      const pnlR = (marketCents - costCents) / 100;
-      const pnlP = costCents > 0 ? ((marketCents - costCents) / costCents) * 100 : 0;
+      const costRands = Number(h.avg_fill || 0) * Number(h.quantity || 0);
+      const marketRands = h.market_value || 0;
+      const pnlR = marketRands - costRands;
+      const pnlP = costRands > 0 ? ((marketRands - costRands) / costRands) * 100 : 0;
       return { ...h, pnlR, pnlP };
     })
     .sort((a, b) => b.pnlP - a.pnlP)
     .slice(0, 5);
 
-  // Avatar gradient based on first letter hash
-  const gradients = [
-    "linear-gradient(135deg,#7c3aed,#5b21b6)",
-    "linear-gradient(135deg,#a855f7,#7c3aed)",
-    "linear-gradient(135deg,#8b5cf6,#6366f1)",
-    "linear-gradient(135deg,#a78bfa,#7c3aed)",
-    "linear-gradient(135deg,#9333ea,#7c3aed)",
-  ];
-  const avatarGradient = gradients[(childName.charCodeAt(0) || 0) % gradients.length];
+
 
   return (
     <div
@@ -1264,7 +1206,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
         backgroundAttachment: "fixed",
       }}
     >
-      {/* ── Header ── */}
+      {/* â”€â”€ Header â”€â”€ */}
       <div className="px-4 pt-12 pb-6">
         <div className="mx-auto w-full max-w-sm md:max-w-md">
           <div className="flex items-center gap-3">
@@ -1277,44 +1219,22 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             <div className="flex-1" />
           </div>
 
-          {/* Child profile card */}
-          <div className="flex flex-col items-center mt-6">
-            <Avatar name={childName} gradient={avatarGradient} size="h-24 w-24" text="text-4xl" />
-            <h1 className="text-2xl font-bold text-slate-800 mt-4 tracking-tight">{childName}</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[11px] font-bold tracking-wide bg-white/90 backdrop-blur-md text-slate-700 border border-slate-200 shadow-sm">
-                <Baby className="h-3.5 w-3.5" />
-                {age !== null ? `${age} yr${age !== 1 ? "s" : ""} old` : "Child"}
-              </span>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold tracking-wide border ${
-                  childKycStatus === "completed"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : childKycStatus === "rejected"
-                      ? "bg-red-50 text-red-700 border-red-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${childKycStatus === "pending" ? "animate-pulse" : ""}`} style={{ backgroundColor: "currentColor" }} />
-                {childKycLabel}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-2">
-              <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-              <span className="text-[11px] text-slate-600">
-                Managed by {parentName}
-                {parentMintNumber ? ` · #${parentMintNumber}` : ""}
-              </span>
-            </div>
+          <div className="mt-4">
+            <SwipeableBalanceCard
+              userId={null}
+              mintNumber={parentMintNumber || null}
+              overrideBalance={totalPortfolioCents / 100}
+              overrideWalletBalance={childBalance / 100}
+            />
           </div>
         </div>
       </div>
 
-      {/* ── Content ── */}
+      {/* Content */}
       <div className="mx-auto w-full max-w-sm px-4 pb-12 md:max-w-md">
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
 
-          {/* ── Incomplete profile banner ── */}
+          {/* â”€â”€ Incomplete profile banner â”€â”€ */}
           {isProfileIncomplete && (
             <motion.div variants={item}>
               <button
@@ -1336,76 +1256,48 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             </motion.div>
           )}
 
-          {/* ── Unified Wallet + Portfolio Card ── */}
-          <motion.div
-            variants={item}
-            className="rounded-3xl relative overflow-hidden"
-            style={{
-              background: "linear-gradient(160deg, #1e1b4b 0%, #312e81 45%, #4c1d95 100%)",
-              boxShadow: "0 24px 48px -12px rgba(79,70,229,0.45)",
-            }}
-          >
-            {/* Subtle glare orbs */}
-            <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.07), transparent 70%)" }} />
-            <div className="pointer-events-none absolute -bottom-12 -left-12 h-48 w-48 rounded-full" style={{ background: "radial-gradient(circle, rgba(168,85,247,0.18), transparent 70%)" }} />
-
-            <div className="relative px-6 pt-7 pb-6">
-
-              {/* Label row */}
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[11px] font-semibold tracking-[0.18em] text-white/50 uppercase">Available Balance</p>
-                <span className="text-[10px] font-semibold tracking-wider text-white/35 uppercase">{child?.first_name}'s Wallet</span>
-              </div>
-
-              {/* Wallet balance */}
-              <p className="text-[2.85rem] font-bold text-white tracking-tight leading-none mb-6">{fmt(childBalance)}</p>
-
-              {/* Hairline divider */}
-              <div className="h-px w-full mb-5" style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }} />
-
-              {/* Portfolio row */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase mb-1">Portfolio Value</p>
-                  <p className="text-2xl font-bold text-white tracking-tight">{fmt(totalPortfolioCents)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase mb-1">All-time return</p>
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-sm font-semibold tracking-tight ${isPortUp ? "text-emerald-300" : "text-red-300"}`}
-                    style={{ color: isPortUp ? "#86efac" : "#fca5a5" }}
+          {/* Quick Actions */}
+          <motion.div variants={item}>
+            <div className="grid grid-cols-4 gap-2 text-[11px] font-medium">
+              {[
+                { label: "Learn", icon: BookOpen, onClick: null, comingSoon: true },
+                { label: "Invest", icon: LayoutGrid, onClick: () => setShowInvest(true) },
+                { label: "Deposit", icon: ArrowDownToLine, onClick: openTransferModal, disabled: openingTransfer },
+                { label: "Goals", icon: Target, onClick: null, comingSoon: true },
+              ].map((btn, i) => {
+                const Icon = btn.icon;
+                return (
+                  <button
+                    key={i}
+                    disabled={btn.comingSoon || btn.disabled}
+                    onClick={btn.onClick}
+                    className={`relative flex flex-col items-center gap-2 rounded-2xl px-1 py-3 transition-all ${
+                      btn.comingSoon
+                        ? "bg-slate-100/70 cursor-not-allowed border border-slate-200/60"
+                        : "bg-white shadow-md active:scale-95 active:shadow-sm"
+                    } disabled:opacity-60`}
+                    type="button"
                   >
-                    {isPortUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                    {isPortUp ? "+" : ""}{fmt(totalPnlCents)}&nbsp;
-                    <span className="font-semibold opacity-80">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={openTransferModal}
-                  disabled={openingTransfer}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition active:scale-[0.97]"
-                  style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.14)", backdropFilter: "blur(12px)" }}
-                >
-                  <ArrowDownLeft className="h-4 w-4" />
-                  {openingTransfer ? "Loading…" : "Transfer"}
-                </button>
-                <button
-                  onClick={() => setShowInvest(true)}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition active:scale-[0.97]"
-                  style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.14)", backdropFilter: "blur(12px)" }}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  Invest
-                </button>
-              </div>
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                      btn.comingSoon ? "bg-slate-200 text-slate-400" : "bg-violet-50 text-violet-700"
+                    }`}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className={`text-center leading-tight font-medium ${
+                      btn.comingSoon ? "text-slate-400" : "text-slate-700"
+                    }`}>
+                      {btn.disabled && !btn.comingSoon ? "Loading…" : btn.label}
+                    </span>
+                    {btn.comingSoon && (
+                      <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 inline-flex items-center px-1.5 py-px rounded-full text-[7px] font-bold uppercase tracking-wider text-white" style={{ background: "linear-gradient(90deg,#7c3aed,#a855f7)" }}>Soon</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
 
-          {/* ── Strategy Holdings ── */}
+          {/* â”€â”€ Strategy Holdings â”€â”€ */}
           <motion.div variants={item}>
             <div className="flex items-center gap-2 mb-3 px-1">
               <div className="h-2 w-2 rounded-full bg-slate-300" />
@@ -1415,87 +1307,57 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             {strategyCards.length > 0 ? (
               <div className="space-y-3">
                 {strategyCards.map((sc) => {
-                  const ytdPct = sc.r_ytd != null ? sc.r_ytd * 100 : null;
-                  const isUp = (ytdPct ?? sc.pnlPct) >= 0;
-                  const displayList = sc.holdingsList.length > 0 ? sc.holdingsList : sc.holdings;
+                  const isUp = sc.pnl >= 0;
                   return (
                     <div key={sc.id} className="rounded-2xl border border-slate-200 bg-white shadow-md p-4">
-                      {/* Header: name + sparkline */}
+                      {/* Header */}
                       <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-slate-900 truncate">{sc.short_name || sc.name}</p>
-                          <p className="text-[11px] text-slate-400 truncate">{sc.name}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">{fmt(sc.totalValue)}</p>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                            style={{ background: "linear-gradient(135deg,#ede9fe,#ddd6fe)" }}>
+                            <BarChart3 className="h-5 w-5 text-purple-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-900 truncate">{sc.short_name || sc.name}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {sc.risk_level && (
+                                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-600 border border-violet-100">{sc.risk_level}</span>
+                              )}
+                              {sc.is_featured && (
+                                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-violet-100 text-violet-700">Featured</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-shrink-0 rounded-xl bg-slate-50 px-2 py-1.5">
-                          <svg width="64" height="32" viewBox="0 0 64 32">
-                            <defs>
-                              <linearGradient id={`sg-child-${sc.id}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={isUp ? "#7c3aed" : "#e11d48"} stopOpacity="0.15" />
-                                <stop offset="100%" stopColor={isUp ? "#7c3aed" : "#e11d48"} stopOpacity="0" />
-                              </linearGradient>
-                            </defs>
-                            <polyline
-                              points="0,28 10,22 20,24 30,14 40,10 50,16 64,6"
-                              fill="none"
-                              stroke={isUp ? "#7c3aed" : "#e11d48"}
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <circle cx="64" cy="6" r="2.5" fill={isUp ? "#7c3aed" : "#e11d48"} />
-                          </svg>
-                        </div>
-                      </div>
-                      {/* Badges */}
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        {sc.risk_level && (
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">{sc.risk_level}</span>
-                        )}
-                        {sc.is_featured && (
-                          <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-600">Featured</span>
-                        )}
-                      </div>
-                      {/* YTD return */}
-                      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 mb-3">
-                        <span className="text-xs font-semibold text-slate-600">YTD return</span>
-                        <div className="flex items-center gap-2">
-                          {ytdPct != null ? (
-                            <span className={`text-xs font-semibold ${ytdPct >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                              {ytdPct >= 0 ? "+" : ""}{ytdPct.toFixed(2)}%
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                          {sc.ytd_as_of_date && (
-                            <span className="text-[10px] text-slate-400">
-                              {new Date(sc.ytd_as_of_date).toLocaleDateString("en-ZA", { month: "short", day: "numeric" })}
-                            </span>
-                          )}
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-slate-900 tabular-nums">{fmt(sc.totalValue)}</p>
+                          <p className={`text-xs font-semibold tabular-nums ${isUp ? "text-emerald-600" : "text-red-500"}`}>
+                            {isUp ? "+" : ""}{fmt(sc.pnl)} ({isUp ? "+" : ""}{sc.pnlPct.toFixed(2)}%)
+                          </p>
                         </div>
                       </div>
-                      {/* Holdings snapshot */}
-                      {displayList.length > 0 && (
-                        <div className="flex items-center gap-2">
+                      {/* Holdings avatar row */}
+                      {sc.holdings.length > 0 && (
+                        <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
                           <div className="flex -space-x-2">
-                            {displayList.slice(0, 3).map((h, i) => (
-                              <div key={h.symbol || h.id || i} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
+                            {sc.holdings.slice(0, 4).map(h => (
+                              <div key={h.id} className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white shadow-sm">
                                 {h.logo_url ? (
                                   <img src={h.logo_url} alt={h.symbol} className="h-full w-full object-cover" />
                                 ) : (
                                   <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[8px] font-bold text-slate-600">
-                                    {(h.symbol || "").substring(0, 2)}
+                                    {h.symbol?.substring(0, 2)}
                                   </div>
                                 )}
                               </div>
                             ))}
-                            {displayList.length > 3 && (
+                            {sc.holdings.length > 4 && (
                               <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[10px] font-semibold text-slate-500">
-                                +{displayList.length - 3}
+                                +{sc.holdings.length - 4}
                               </div>
                             )}
                           </div>
-                          <span className="text-xs font-semibold text-slate-500">Holdings snapshot</span>
+                          <span className="text-[11px] text-slate-400">{sc.holdings.length} holding{sc.holdings.length !== 1 ? "s" : ""}</span>
                         </div>
                       )}
                     </div>
@@ -1521,7 +1383,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             )}
           </motion.div>
 
-          {/* ── Best Performing Assets ── */}
+          {/* â”€â”€ Best Performing Assets â”€â”€ */}
           {bestAssets.length > 0 && (
             <motion.div variants={item}>
               <div className="flex items-center gap-2 mb-3 px-1">
@@ -1559,7 +1421,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             </motion.div>
           )}
 
-          {/* ── Recent Activity ── */}
+          {/* â”€â”€ Recent Activity â”€â”€ */}
           <motion.div variants={item}>
             <div className="flex items-center gap-2 mb-3 px-1">
               <div className="h-2 w-2 rounded-full bg-slate-300" />
@@ -1581,7 +1443,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
             )}
           </motion.div>
 
-          {/* ── Account Info ── */}
+          {/* â”€â”€ Account Info â”€â”€ */}
           <motion.div variants={item}>
             <div className="flex items-center gap-2 mb-3 px-1">
               <div className="h-2 w-2 rounded-full bg-slate-300" />
@@ -1645,7 +1507,7 @@ export default function ChildDashboardPage({ child: initialChild, onBack }) {
         </motion.div>
       </div>
 
-      {/* ── Modals ── */}
+      {/* â”€â”€ Modals â”€â”€ */}
       <AnimatePresence>
         {showTransfer && (
           <TransferModal

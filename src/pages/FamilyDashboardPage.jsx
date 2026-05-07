@@ -518,9 +518,11 @@ function AddMemberModal({ type, userId, profile, coGuardians = [], onSave, onClo
         signed_at: signedAt 
       };
       setChildComplete({ member: finalMember });
+      return true;
     } catch (err) {
       console.error("[agreement]", err);
       setError(err.message || "Finalization failed. Please try again.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1100,16 +1102,17 @@ export default function FamilyDashboardPage({ onBack, userId, onOpenChildDashboa
       console.log('[family] fetchMembers userId:', userId);
       const res = await fetch(`/api/family-members?user_id=${userId}`);
       const json = await res.json();
-      console.log('[family] fetchMembers response:', json);
-      setMembers(json.members || []);
+      const loadedMembers = json.members || [];
+      setMembers(loadedMembers);
+      fetchPortfolio(loadedMembers);
     } catch (e) { console.error("[family]", e); }
     finally { setLoading(false); }
   }
 
-  async function fetchPortfolio() {
+  async function fetchPortfolio(membersList = members) {
     if (!userId) return;
-    const spouseUserIds = members.filter(m => m.relationship === "spouse" && m.linked_user_id).map(m => m.linked_user_id);
-    const childMemberIds = members.filter(m => m.relationship === "child").map(m => m.id);
+    const spouseUserIds = membersList.filter(m => m.relationship === "spouse" && m.linked_user_id).map(m => m.linked_user_id);
+    const childMemberIds = membersList.filter(m => m.relationship === "child").map(m => m.id);
     const allUserIds = [userId, ...spouseUserIds];
     
     try {
@@ -1183,7 +1186,7 @@ export default function FamilyDashboardPage({ onBack, userId, onOpenChildDashboa
       setHeadBalance(headTotal);
 
       // Calculate other member balances
-      members.forEach(m => {
+      membersList.forEach(m => {
         if (m.relationship === "spouse" && m.linked_user_id) {
           const sHoldings = holdings.filter(h => h.user_id === m.linked_user_id);
           const sWallet = wallets.find(w => w.user_id === m.linked_user_id);

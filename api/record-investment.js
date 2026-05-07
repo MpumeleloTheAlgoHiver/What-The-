@@ -116,10 +116,12 @@ export default async function handler(req, res) {
 
     const db = supabaseAdmin || supabase;
     const userId = user.id;
-    const { securityId, symbol, name, amount, baseAmount, strategyId, paymentReference, paymentMethod, shareCount } = req.body;
+    const { securityId, symbol, name, amount, baseAmount, strategyId, paymentReference, paymentMethod, shareCount, childUserId } = req.body;
     // baseAmount = investment amount excluding fees (used for holdings/quantity calculations)
     // amount = total charged including fees (used for transaction records)
     const investAmount = (baseAmount && baseAmount > 0) ? baseAmount : amount;
+    // targetUserId: child's account for kid strategies, otherwise the investor themselves
+    const targetUserId = childUserId || userId;
 
     if ((!securityId && !strategyId) || !amount || Number(amount) <= 0 || !paymentReference) {
       return res.status(400).json({ success: false, error: "Missing required fields: securityId or strategyId, amount, paymentReference" });
@@ -277,7 +279,7 @@ export default async function handler(req, res) {
         const { data: existing, error: lookupErr } = await db
           .from("stock_holdings_c")
           .select("id, quantity, avg_fill")
-          .eq("user_id", userId)
+          .eq("user_id", targetUserId)
           .eq("security_id", sec.id)
           .eq("strategy_id", strategyId)
           .maybeSingle();
@@ -309,7 +311,7 @@ export default async function handler(req, res) {
           }
         } else {
           const { error: insertErr } = await db.from("stock_holdings_c").insert({
-            user_id: userId,
+            user_id: targetUserId,
             security_id: sec.id,
             strategy_id: strategyId,
             quantity: holdingQty,
@@ -338,7 +340,7 @@ export default async function handler(req, res) {
       const { data: existingUS } = await db
         .from("user_strategies")
         .select("id, invested_amount")
-        .eq("user_id", userId)
+        .eq("user_id", targetUserId)
         .eq("strategy_id", strategyId)
         .maybeSingle();
 
@@ -356,7 +358,7 @@ export default async function handler(req, res) {
         const { error: usInsertErr } = await db
           .from("user_strategies")
           .insert({
-            user_id: userId,
+            user_id: targetUserId,
             strategy_id: strategyId,
             invested_amount: investmentAmountCents,
             status: "active",
@@ -410,7 +412,7 @@ export default async function handler(req, res) {
       const { data: existing, error: fetchError } = await db
         .from("stock_holdings_c")
         .select("id, quantity, avg_fill, market_value")
-        .eq("user_id", userId)
+        .eq("user_id", targetUserId)
         .eq("security_id", securityId)
         .maybeSingle();
 
@@ -440,7 +442,7 @@ export default async function handler(req, res) {
         const { data, error } = await db
           .from("stock_holdings_c")
           .insert({
-            user_id: userId,
+            user_id: targetUserId,
             security_id: securityId,
             quantity: quantity,
             avg_fill: avgFillCents,
@@ -468,7 +470,7 @@ export default async function handler(req, res) {
     const { error: txError } = await db
       .from("transactions")
       .insert({
-        user_id: userId,
+        user_id: targetUserId,
         direction: "debit",
         name: isStrategyInvestment ? `Strategy Investment: ${name || symbol || "Strategy"}` : `Purchased ${name || symbol || "Stock"}`,
         description: descriptionText,
@@ -499,6 +501,53 @@ export default async function handler(req, res) {
       orderDate,
       paymentMethod,
     }).catch(() => {});
+
+    // ── Strategy subscription: create R29/month record if this is an additional strategy ──
+    if (isStrategyInvestment && strategyId) {
+      try {
+        // Check if user has any OTHER active strategy (making this the 2nd+)
+        const { data: otherStrategies } = await db
+          .from("user_strategies")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .neq("strategy_id", strategyId)
+          .limit(1);
+
+        if (otherStrategies && otherStrategies.length > 0) {
+          // Calculate next billing date (same calendar day, next month)
+          const now = new Date();
+          const day = now.getDate();
+          const next = new Date(now);
+          next.setMonth(next.getMonth() + 1);
+          if (next.getDate() < day) next.setDate(0);
+          const nextBillingDate = next.toISOString().split("T")[0];
+
+          const { error: subError } = await db
+            .from("subscriptions")
+            .upsert(
+              {
+                user_id: userId,
+                plan: name || "Strategy",
+                amount: 29,
+                currency: "ZAR",
+                current_period_end: nextBillingDate,
+                status: "active",
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,plan" }
+            );
+
+          if (subError) {
+            console.warn("[record-investment] Strategy subscription upsert failed:", subError.message);
+          } else {
+            console.log(`[record-investment] Subscription created for user ${userId}, strategy ${name}. First billing: ${nextBillingDate}`);
+          }
+        }
+      } catch (subErr) {
+        console.warn("[record-investment] Subscription setup error (non-fatal):", subErr.message);
+      }
+    }
 
     return res.status(200).json({ 
       success: true, 

@@ -232,38 +232,9 @@ const CreditHome = ({ profile, onOpenNotifications, onTabChange }) => {
           {ctaCards.map((item, i) => (
             <button
               key={i}
-              onClick={async () => {
-                if (navigating) return;
-
-                let hasDeclarations = profile?.declarations && Object.keys(profile.declarations).length > 0;
-
-                if (!hasDeclarations && profile?.id) {
-                  setNavigating(true);
-                  try {
-                    const { data } = await supabase
-                      .from('profiles')
-                      .select('declarations')
-                      .eq('id', profile.id)
-                      .single();
-                    
-                    if (data?.declarations && Object.keys(data.declarations).length > 0) {
-                      hasDeclarations = true;
-                      profile.declarations = data.declarations;
-                    }
-                  } catch (err) {
-                    console.error("Failed to check declarations", err);
-                  } finally {
-                    setNavigating(false);
-                  }
-                }
-
-                if (!hasDeclarations) {
-                  setPendingAction(item.id);
-                  setShowConsentModal(true);
-                } else {
-                  if (item.id === "portfolio") onTabChange("instantLiquidity");
-                  if (item.id === "unsecured") handleUnsecuredClick();
-                }
+              onClick={() => {
+                if (item.id === "portfolio") onTabChange("instantLiquidity");
+                if (item.id === "unsecured") handleUnsecuredClick();
               }}
               disabled={navigating}
               className="w-full flex items-center justify-between bg-white p-2 pl-8 rounded-full group active:scale-[0.98] transition-all shadow-2xl"
